@@ -25,7 +25,7 @@ Traffic between friends is end-to-end encrypted (XChaCha20-Poly1305, with the ke
 |---|---|---|---|
 | 29814 | TCP | 0.0.0.0/0 | client control connection |
 | 29814 | UDP | 0.0.0.0/0 | registration and relay |
-| 21958 | TCP | **your IP only** | admin dashboard |
+| 21958 | TCP | 0.0.0.0/0 | dashboard: installer download for friends, password-protected admin pages |
 
 Give the instance an Elastic IP so its address doesn't change. The installers you build contain this address.
 
@@ -41,23 +41,25 @@ bash deploy.sh
 To update later, push your changes and run `bash deploy.sh` again.
 
 - Logs: `docker logs -f zainvpn-coordinator`
-- State: stored in the `zainvpn-data` Docker volume.
+- State and the uploaded installer: stored in the `zainvpn-data` Docker volume.
 
 ## 2. Build the installer (on Windows)
 
 Requires Go and Inno Setup 6.6 or later (`winget install GoLang.Go JRSoftware.InnoSetup`).
 
 ```powershell
-.\build.ps1 -Server <elastic-ip> -Network blur -Password "something-long"
+.\build.ps1 -Server <elastic-ip> -Network blur -Password "something-long" -Publish
 ```
 
-The result is `dist\zainVPN-Setup.exe`. The coordinator address, network name and password are pre-filled in the installer, so friends only choose a nickname. Anyone who has this file can join your network, so share it only with your group. You can also put the defaults in `build.config.json` (see `build.config.example.json`) and run `.\build.ps1` with no arguments.
+This builds `dist\zainVPN-Setup.exe` and, with `-Publish`, uploads it to the dashboard (it asks for the admin password). Friends then open `http://<elastic-ip>:21958/` and click **Download zainVPN for Windows** on the sign-in page. You can also upload the file by hand on the dashboard, under **Installer**.
+
+The coordinator address, network name and password are pre-filled in the installer, so friends only choose a nickname. That also means anyone who can download it can join your network. To require a code for the download, set `ZAINVPN_DOWNLOAD_CODE` in `.env` on the server and run `bash deploy.sh` again. You can also put the build defaults in `build.config.json` (see `build.config.example.json`) and run `.\build.ps1 -Publish` with no other arguments.
 
 The network is created the first time someone joins it, using whatever password that person used.
 
 ## 3. Install and play
 
-1. Run `zainVPN-Setup.exe`, approve the admin prompt, pick a nickname, and click Next until it finishes.
+1. Download `zainVPN-Setup.exe` from the dashboard's sign-in page, run it, approve the admin prompt, pick a nickname, and click Next until it finishes.
 2. The zainVPN page (Start menu → zainVPN) shows your virtual IP and who's online, and whether each connection is **Direct** or **Relayed**.
 3. In Blur, choose the LAN game mode. Games hosted by friends appear automatically. If a game asks for an IP address, use the host's virtual IP (10.77.0.x).
 

@@ -11,6 +11,12 @@
   .\build.ps1 -Server 1.2.3.4 -Network blur -Password secret
 
 .EXAMPLE
+  .\build.ps1 -Server 1.2.3.4 -Network blur -Password secret -Publish
+  Also uploads the installer to the coordinator dashboard (http://1.2.3.4:21958 unless
+  -DashboardUrl is given), where friends download it from the sign-in page. Asks for
+  the admin password unless -AdminPassword or build.config.json provides it.
+
+.EXAMPLE
   .\build.ps1 -SkipInstaller -ServerBinaries
 
 .EXAMPLE
@@ -24,7 +30,10 @@ param(
     [string]$Name,
     [string]$Version,
     [switch]$SkipInstaller,
-    [switch]$ServerBinaries
+    [switch]$ServerBinaries,
+    [switch]$Publish,
+    [string]$DashboardUrl,
+    [string]$AdminPassword
 )
 
 Set-StrictMode -Version Latest
@@ -109,7 +118,7 @@ if (Test-Path -LiteralPath $configPath) {
     }
     $cfg = @{}
     foreach ($p in $json.PSObject.Properties) { $cfg[$p.Name] = [string]$p.Value }
-    foreach ($key in 'Server', 'Network', 'Password', 'Name') {
+    foreach ($key in 'Server', 'Network', 'Password', 'Name', 'DashboardUrl', 'AdminPassword') {
         if (-not $PSBoundParameters.ContainsKey($key) -and $cfg.ContainsKey($key)) {
             Set-Variable -Name $key -Value $cfg[$key]
         }
@@ -183,6 +192,7 @@ if ($ServerBinaries) {
 }
 
 if ($SkipInstaller) {
+    if ($Publish) { throw '-Publish needs the installer; drop -SkipInstaller' }
     Write-Step 'Skipping the installer (-SkipInstaller)'
     return
 }
@@ -217,4 +227,27 @@ Write-Host ('Installer: {0} ({1:N1} MB)' -f $setup, $size) -ForegroundColor Gree
 Write-Host ('SHA-256:   {0}' -f (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash)
 if ($Password) {
     Write-Warning "Anyone with this installer can join network '$Network': it contains the password. Share it only with friends."
+}
+
+if ($Publish) {
+    if (-not $DashboardUrl) {
+        if (-not $Server) { throw '-Publish needs -DashboardUrl or -Server' }
+        $DashboardUrl = 'http://{0}:21958' -f ($Server -replace ':\d+$', '')
+    }
+    $DashboardUrl = $DashboardUrl.TrimEnd('/')
+    if (-not $AdminPassword) {
+        $secure = Read-Host -AsSecureString "Admin password for $DashboardUrl"
+        $AdminPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    }
+    Write-Step "Publishing the installer to $DashboardUrl"
+    if ($PSCmdlet.ShouldProcess("$DashboardUrl/api/installer", 'upload installer')) {
+        try {
+            Invoke-WebRequest -UseBasicParsing -Method Put -Uri "$DashboardUrl/api/installer" -InFile $setup `
+                -ContentType 'application/octet-stream' -Headers @{ Authorization = "Bearer $AdminPassword" } -TimeoutSec 600 | Out-Null
+        } catch {
+            $detail = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { " $($_.ErrorDetails.Message)" } else { '' }
+            throw "Upload to $DashboardUrl failed: $($_.Exception.Message)$detail"
+        }
+        Write-Host "Published. Send your friends this link: $DashboardUrl/" -ForegroundColor Green
+    }
 }

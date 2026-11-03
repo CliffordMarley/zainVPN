@@ -14,9 +14,12 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +44,10 @@ const (
 	lockout     = 5 * time.Minute  // ...lock that IP out for this long
 	csrfHeader  = "X-Requested-With"
 	csrfValue   = "zainvpn"
+
+	installerName = "zainVPN-Setup.exe"
+	maxInstaller  = 100 << 20
+	transferTime  = 10 * time.Minute // upload/download deadline, past the server's 30s default
 )
 
 // Handler is the dashboard's http.Handler.
@@ -53,6 +60,10 @@ type Handler struct {
 	log         *log.Logger
 	mux         *http.ServeMux
 	failDelay   time.Duration // tests set this to 0
+
+	installer    string   // path of the uploaded installer; "" disables downloads
+	downloadHash [32]byte // sha256 of the optional download code
+	downloadCode bool
 
 	mu       sync.Mutex
 	sessions map[[32]byte]time.Time // sha256(token) -> expiry
@@ -88,7 +99,9 @@ func New(srv *server.Server, adminPassword, version string, controlPort int, log
 	m.HandleFunc("POST /login", h.login)
 	m.HandleFunc("POST /logout", h.logout)
 	m.HandleFunc("GET /{$}", h.index)
+	m.HandleFunc("GET /download", h.download)
 	m.HandleFunc("GET /api/snapshot", h.api(h.snapshot))
+	m.HandleFunc("PUT /api/installer", h.api(h.uploadInstaller))
 	m.HandleFunc("DELETE /api/networks/{name}", h.api(h.deleteNetwork))
 	m.HandleFunc("DELETE /api/networks/{name}/devices/{id}", h.api(h.removeDevice))
 	m.HandleFunc("/api/", h.api(func(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +110,15 @@ func New(srv *server.Server, adminPassword, version string, controlPort int, log
 	m.HandleFunc("/", http.NotFound)
 	h.mux = m
 	return h
+}
+
+// EnableInstaller lets the admin upload the Windows installer, stored at
+// path, and lets anyone download it from the sign-in page. A non-empty code
+// must then be entered to download it.
+func (h *Handler) EnableInstaller(path, code string) {
+	h.installer = path
+	h.downloadHash = sha256.Sum256([]byte(code))
+	h.downloadCode = code != ""
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -141,9 +163,17 @@ func (h *Handler) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) renderLogin(w http.ResponseWriter, status int, msg string) {
+	h.renderLoginPage(w, status, msg, "")
+}
+
+func (h *Handler) renderLoginPage(w http.ResponseWriter, status int, msg, downloadErr string) {
 	nonce := htmlHeaders(w)
 	w.WriteHeader(status)
-	err := loginTmpl.Execute(w, struct{ Nonce, Error, Version string }{nonce, msg, h.version})
+	err := loginTmpl.Execute(w, struct {
+		Nonce, Error, Version, DownloadError string
+		Installer                            *installerInfo
+		NeedCode                             bool
+	}{nonce, msg, h.version, downloadErr, h.installerInfo(), h.downloadCode})
 	if err != nil {
 		h.log.Printf("dashboard: login page: %v", err)
 	}
@@ -201,8 +231,27 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // api requires a session, plus the CSRF header on anything but reads.
+// Scripts (build.ps1 -Publish) may instead send "Authorization: Bearer
+// <admin password>", which browsers never add on their own, so no CSRF check.
 func (h *Handler) api(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if pw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+			ip := clientIP(r)
+			if h.lockedFor(ip) > 0 {
+				writeJSON(w, http.StatusTooManyRequests, errBody("too many failed attempts, try again later"))
+				return
+			}
+			got := sha256.Sum256([]byte(pw))
+			if !h.pwSet || subtle.ConstantTimeCompare(got[:], h.pwHash[:]) != 1 {
+				h.recordFailure(ip)
+				h.log.Printf("dashboard: bad API token from %s", ip)
+				time.Sleep(h.failDelay)
+				writeJSON(w, http.StatusUnauthorized, errBody("wrong admin password"))
+				return
+			}
+			next(w, r)
+			return
+		}
 		if !h.authed(r) {
 			writeJSON(w, http.StatusUnauthorized, errBody("not signed in"))
 			return
@@ -218,10 +267,111 @@ func (h *Handler) api(next http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) snapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, struct {
 		server.Snapshot
-		Version     string    `json:"version"`
-		ControlPort int       `json:"controlPort"`
-		Now         time.Time `json:"now"`
-	}{h.srv.Snapshot(), h.version, h.controlPort, time.Now().UTC()})
+		Version      string         `json:"version"`
+		ControlPort  int            `json:"controlPort"`
+		Now          time.Time      `json:"now"`
+		Downloads    bool           `json:"downloads"`
+		DownloadCode bool           `json:"downloadCode"`
+		Installer    *installerInfo `json:"installer"`
+	}{h.srv.Snapshot(), h.version, h.controlPort, time.Now().UTC(), h.installer != "", h.downloadCode, h.installerInfo()})
+}
+
+type installerInfo struct {
+	Size     int64     `json:"size"`
+	Uploaded time.Time `json:"uploaded"`
+}
+
+// Human-readable forms for the sign-in page template.
+func (i *installerInfo) SizeText() string { return fmt.Sprintf("%.1f MB", float64(i.Size)/(1<<20)) }
+func (i *installerInfo) DateText() string { return i.Uploaded.Format("2 Jan 2006") }
+
+// installerInfo describes the uploaded installer, or returns nil if there is none.
+func (h *Handler) installerInfo() *installerInfo {
+	if h.installer == "" {
+		return nil
+	}
+	fi, err := os.Stat(h.installer)
+	if err != nil {
+		return nil
+	}
+	return &installerInfo{Size: fi.Size(), Uploaded: fi.ModTime().UTC()}
+}
+
+// download serves the installer to anyone (it's how friends get zainVPN),
+// after checking the download code if one is configured.
+func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
+	if h.installerInfo() == nil {
+		http.Error(w, "No installer has been uploaded yet. Ask your group's admin.", http.StatusNotFound)
+		return
+	}
+	if h.downloadCode {
+		ip := clientIP(r)
+		if wait := h.lockedFor(ip); wait > 0 {
+			h.renderLoginPage(w, http.StatusTooManyRequests, "", lockedMsg(wait))
+			return
+		}
+		got := sha256.Sum256([]byte(r.URL.Query().Get("code")))
+		if subtle.ConstantTimeCompare(got[:], h.downloadHash[:]) != 1 {
+			h.recordFailure(ip)
+			time.Sleep(h.failDelay)
+			h.renderLoginPage(w, http.StatusUnauthorized, "", "Incorrect download code.")
+			return
+		}
+	}
+	f, err := os.Open(h.installer)
+	if err != nil {
+		http.Error(w, "installer unavailable", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		http.Error(w, "installer unavailable", http.StatusInternalServerError)
+		return
+	}
+	http.NewResponseController(w).SetWriteDeadline(time.Now().Add(transferTime))
+	w.Header().Set("Content-Type", "application/vnd.microsoft.portable-executable")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+installerName+`"`)
+	h.log.Printf("dashboard: installer downloaded by %s", clientIP(r))
+	http.ServeContent(w, r, installerName, fi.ModTime(), f)
+}
+
+// uploadInstaller replaces the installer with the request body (a raw .exe).
+func (h *Handler) uploadInstaller(w http.ResponseWriter, r *http.Request) {
+	if h.installer == "" {
+		writeJSON(w, http.StatusNotFound, errBody("installer downloads are disabled"))
+		return
+	}
+	http.NewResponseController(w).SetReadDeadline(time.Now().Add(transferTime))
+	tmp, err := os.CreateTemp(filepath.Dir(h.installer), ".upload-*")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errBody(err.Error()))
+		return
+	}
+	defer os.Remove(tmp.Name())
+	n, err := io.Copy(tmp, http.MaxBytesReader(w, r.Body, maxInstaller))
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody("upload failed: "+err.Error()))
+		return
+	}
+	head := make([]byte, 2)
+	if f, err := os.Open(tmp.Name()); err == nil {
+		io.ReadFull(f, head)
+		f.Close()
+	}
+	if n < 1024 || string(head) != "MZ" {
+		writeJSON(w, http.StatusBadRequest, errBody("that isn't a Windows .exe file"))
+		return
+	}
+	if err := os.Rename(tmp.Name(), h.installer); err != nil {
+		writeJSON(w, http.StatusInternalServerError, errBody(err.Error()))
+		return
+	}
+	h.log.Printf("dashboard: installer uploaded from %s (%d bytes)", clientIP(r), n)
+	writeJSON(w, http.StatusOK, h.installerInfo())
 }
 
 func (h *Handler) deleteNetwork(w http.ResponseWriter, r *http.Request) {

@@ -50,7 +50,11 @@ main { display: flex; justify-content: center; padding: 64px 16px 32px; }
 .wrap { width: 100%; max-width: 420px; }
 .container { border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .container-header { padding: 16px 20px; }
-h1 { margin: 0; font-size: 18px; line-height: 22px; }
+h1, h2 { margin: 0; font-size: 18px; line-height: 22px; }
+.container + .container { margin-top: 20px; }
+.meta { text-align: center; }
+.steps { margin: 16px 0 0; padding-left: 20px; color: var(--text-2); }
+.steps li + li { margin-top: 4px; }
 .container-header p { margin: 4px 0 0; color: var(--text-2); }
 form { padding: 0 20px 20px; }
 .alert { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 16px; padding: 10px 12px 10px 16px; border: 1px solid var(--error); border-left-width: 4px; border-radius: 8px; background: var(--alert-error-bg); }
@@ -74,15 +78,38 @@ button:hover { border-color: var(--primary-hover); background: var(--primary-hov
 </header>
 <main>
   <div class="wrap">
+    {{if .Installer}}
+    <section class="container" aria-labelledby="dl-title">
+      <div class="container-header">
+        <h2 id="dl-title">Join the game</h2>
+        <p>Install zainVPN on your Windows PC to join your friends' virtual LAN.</p>
+      </div>
+      <form method="get" action="/download">
+        {{if .DownloadError}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.DownloadError}}</div></div>{{end}}
+        {{if .NeedCode}}
+        <label for="code">Download code</label>
+        <input id="code" name="code" type="password" autocomplete="off" required aria-describedby="code-desc">
+        <p class="desc" id="code-desc">Ask the person who runs this server.</p>
+        {{end}}
+        <button type="submit">Download zainVPN for Windows</button>
+        <p class="desc meta">zainVPN-Setup.exe · {{.Installer.SizeText}} · updated {{.Installer.DateText}}</p>
+        <ol class="steps">
+          <li>Run the file and approve the admin prompt. If SmartScreen appears, choose <b>More info → Run anyway</b>.</li>
+          <li>Pick a nickname and click through the installer.</li>
+          <li>Start your game and choose LAN. Your friends' games show up automatically.</li>
+        </ol>
+      </form>
+    </section>
+    {{end}}
     <section class="container" aria-labelledby="title">
       <div class="container-header">
-        <h1 id="title">Sign in</h1>
+        <h1 id="title">{{if .Installer}}Admin sign in{{else}}Sign in{{end}}</h1>
         <p>Admin access to this zainVPN coordinator.</p>
       </div>
       <form method="post" action="/login">
         {{if .Error}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.Error}}</div></div>{{end}}
         <label for="password">Admin password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus aria-describedby="password-desc">
+        <input id="password" name="password" type="password" autocomplete="current-password" required{{if not .Installer}} autofocus{{end}} aria-describedby="password-desc">
         <p class="desc" id="password-desc">The <code>ZAINVPN_ADMIN_PASSWORD</code> value from the <code>.env</code> file next to <code>deploy.sh</code> on the server.</p>
         <button type="submit">Sign in</button>
       </form>

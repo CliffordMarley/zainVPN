@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -9,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -235,5 +238,86 @@ func TestDeleteAndRemove(t *testing.T) {
 	snap := srv.Snapshot()
 	if len(snap.Networks) != 1 || snap.Networks[0].Name != "lan party" || len(snap.Networks[0].Devices) != 1 || snap.Networks[0].Devices[0].ID != "dev-a" {
 		t.Fatalf("snapshot after changes: %+v", snap)
+	}
+}
+
+func fakeExe() []byte {
+	b := make([]byte, 4096)
+	copy(b, "MZ")
+	return b
+}
+
+func TestInstallerUploadAndDownload(t *testing.T) {
+	h, _ := newTest(t)
+	h.EnableInstaller(filepath.Join(t.TempDir(), installerName), "")
+
+	if w := do(h, "GET", "/download", nil, nil); w.Code != http.StatusNotFound {
+		t.Errorf("download before upload: %d", w.Code)
+	}
+	if w := do(h, "GET", "/login", nil, nil); strings.Contains(w.Body.String(), "Download zainVPN") {
+		t.Error("login page offers a download before one exists")
+	}
+
+	put := func(body []byte, mod func(*http.Request)) *httptest.ResponseRecorder {
+		return do(h, "PUT", "/api/installer", bytes.NewReader(body), mod)
+	}
+	if w := put(fakeExe(), nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous upload: %d", w.Code)
+	}
+	c := signIn(t, h)
+	if w := put(fakeExe(), withCookie(c, false)); w.Code != http.StatusForbidden {
+		t.Errorf("upload without CSRF header: %d", w.Code)
+	}
+	if w := put([]byte("not an exe, just some text padding it out"), withCookie(c, true)); w.Code != http.StatusBadRequest {
+		t.Errorf("non-exe upload: %d", w.Code)
+	}
+	bearer := func(pw string) func(*http.Request) {
+		return func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+pw) }
+	}
+	if w := put(fakeExe(), bearer("wrong")); w.Code != http.StatusUnauthorized {
+		t.Errorf("upload with wrong token: %d", w.Code)
+	}
+	if w := put(fakeExe(), bearer("s3cret")); w.Code != http.StatusOK {
+		t.Fatalf("upload with token: %d %s", w.Code, w.Body)
+	}
+
+	w := do(h, "GET", "/download", nil, nil)
+	if w.Code != 200 || !bytes.Equal(w.Body.Bytes(), fakeExe()) {
+		t.Fatalf("download: %d, %d bytes", w.Code, w.Body.Len())
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, installerName) {
+		t.Errorf("Content-Disposition %q", cd)
+	}
+	if w := do(h, "GET", "/login", nil, nil); !strings.Contains(w.Body.String(), "Download zainVPN") || strings.Contains(w.Body.String(), "Download code") {
+		t.Error("login page should offer the download without a code")
+	}
+	var snap struct {
+		Downloads bool           `json:"downloads"`
+		Installer *installerInfo `json:"installer"`
+	}
+	w = do(h, "GET", "/api/snapshot", nil, withCookie(c, false))
+	if json.Unmarshal(w.Body.Bytes(), &snap) != nil || !snap.Downloads || snap.Installer == nil || snap.Installer.Size != 4096 {
+		t.Errorf("snapshot installer: %s", w.Body)
+	}
+}
+
+func TestInstallerDownloadCode(t *testing.T) {
+	h, _ := newTest(t)
+	path := filepath.Join(t.TempDir(), installerName)
+	h.EnableInstaller(path, "letmein")
+	if err := os.WriteFile(path, fakeExe(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(h, "GET", "/login", nil, nil); !strings.Contains(w.Body.String(), "Download code") {
+		t.Error("login page should ask for the download code")
+	}
+	if w := do(h, "GET", "/download", nil, nil); w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "Incorrect download code") {
+		t.Errorf("download without code: %d", w.Code)
+	}
+	if w := do(h, "GET", "/download?code=nope", nil, nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("download with wrong code: %d", w.Code)
+	}
+	if w := do(h, "GET", "/download?code=letmein", nil, nil); w.Code != 200 || w.Body.Len() != 4096 {
+		t.Errorf("download with code: %d", w.Code)
 	}
 }

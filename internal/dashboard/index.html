@@ -325,6 +325,7 @@ dialog.modal::backdrop { background: rgba(35, 43, 55, .7); }
   </div>
 </dialog>
 <div class="sr-only" id="sr" aria-live="polite"></div>
+<input type="file" id="installer-file" accept=".exe" hidden>
 
 <script nonce="{{NONCE}}">
 (() => {
@@ -437,7 +438,8 @@ function viewDashboard(s) {
   const addr = `${location.hostname}:${port}`;
   const local = /^(localhost|127\.|\[::1\]$)/.test(location.hostname);
   const dashPort = location.port || (location.protocol === 'https:' ? '443' : '80');
-  const cmd = `.\\build.ps1 -Server ${addr} -Network "<network-name>" -Password "<password>"`;
+  const cmd = `.\\build.ps1 -Server ${addr} -Network "<network-name>" -Password "<password>" -Publish`;
+  const link = `${location.origin}/`;
   const connect = `
 <div class="field-label" id="addr-label">Coordinator address</div>
 <div class="copy-row"><code class="addr" aria-labelledby="addr-label">${esc(addr)}</code>${copyButton('addr', addr, 'Copy coordinator address')}</div>
@@ -445,19 +447,41 @@ function viewDashboard(s) {
 ${local ? alertBox('warning', 'You opened this page through localhost', `<p>Friends can't use <code>${esc(addr)}</code>. Replace it with the server's public IP or DNS name.</p>`) : ''}
 <h3>Add friends in 3 steps</h3>
 <ol class="steps">
-  <li><b>Build the Windows installer</b> on your PC, from the zainVPN folder:
+  <li><b>Build the Windows installer and publish it here</b>, from the zainVPN folder on your PC:
     <div class="cmd-row"><pre class="cmd"><code>${esc(cmd)}</code></pre>${copyButton('cmd', cmd, 'Copy build command')}</div>
-    <p>Choose any network name and a shared password. The network is created when the first device joins.</p></li>
-  <li><b>Send the single <code>zainVPN-Setup.exe</code> to your friends.</b>
-    <p>The address, network and password are built in, so there's nothing to configure.</p></li>
+    <p>Choose any network name and a shared password. <code>-Publish</code> uploads the installer to this dashboard and asks for the admin password. You can also upload <code>dist\\zainVPN-Setup.exe</code> under Installer above.</p></li>
+  <li><b>Send your friends this link:</b>
+    <div class="copy-row"><code class="addr">${esc(link)}</code>${copyButton('link', link, 'Copy download link')}</div>
+    <p>They download zainVPN from the sign-in page${s && s.downloadCode ? ' with the download code (<code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code>)' : ''}. The address, network and password are built into the installer.</p></li>
   <li><b>They install it and pick a nickname.</b>
     <p>zainVPN then runs in the background and starts with Windows. Their PC appears under <a href="#/networks">Networks</a>.</p></li>
 </ol>
-${alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> from anywhere (0.0.0.0/0) for clients. Allow <b>TCP ${esc(dashPort)}</b> (this dashboard) only from your own IP.</p>`)}`;
+${alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> and <b>TCP ${esc(dashPort)}</b> (this page, for downloads) from anywhere. Admin pages still need the password.</p>`)}
+${s && !s.downloadCode ? alertBox('warning', 'Anyone who opens this page can download the installer', `<p>The installer contains the network password. To require a code, set <code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code> and run <code>bash deploy.sh</code>.</p>`) : ''}`;
 
   return pageHeader({ crumbs: [{ text: 'zainVPN', href: '#/' }, { text: 'Dashboard' }], title: 'Dashboard', desc: 'Health of this coordinator and how to connect devices to it.' })
     + container({ title: 'Service overview', body: kv(cols) })
+    + viewInstaller(s)
     + container({ title: 'Connect a device', desc: 'Everything your friends need to join a virtual LAN.', body: connect });
+}
+
+function viewInstaller(s) {
+  const inst = s && s.installer;
+  let body;
+  if (!s) body = loading();
+  else if (!s.downloads) body = '<p>Installer downloads are disabled on this coordinator.</p>';
+  else if (!inst) body = `<div class="empty"><b>No installer uploaded yet</b>Run <code>build.ps1 -Publish</code>, or upload <code>dist\\zainVPN-Setup.exe</code> here.</div>`;
+  else body = kv([
+    [['File', 'zainVPN-Setup.exe'], ['Size', esc(bytes(inst.size))]],
+    [['Uploaded', timeEl(inst.uploaded)], ['Download code', s.downloadCode ? si('success', 'Required') : si('stopped', 'Not required')]],
+  ]);
+  let actions = '';
+  if (s && s.downloads) {
+    const busy = state.uploading;
+    actions = (inst && !s.downloadCode ? '<a class="btn" href="/download">Download</a>' : '')
+      + `<button type="button" class="btn btn-primary" data-action="upload-installer"${busy ? ' disabled' : ''}>${busy ? `${ICON.pending}<span>Uploading…</span>` : (inst ? 'Replace' : 'Upload')}</button>`;
+  }
+  return container({ title: 'Installer', desc: 'The zainVPN-Setup.exe your friends download from the sign-in page.', actions, body });
 }
 
 function viewNetworks(s) {
@@ -749,6 +773,33 @@ async function onCopy(btn) {
   }
 }
 
+const fileInput = $('#installer-file');
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files[0];
+  fileInput.value = '';
+  if (!f) return;
+  if (!/\.exe$/i.test(f.name)) { flash('error', 'Choose the zainVPN-Setup.exe file from the dist folder.'); return; }
+  state.uploading = true;
+  render(false);
+  try {
+    let r;
+    try {
+      r = await fetch('/api/installer', { method: 'PUT', body: f, cache: 'no-store', credentials: 'same-origin', headers: { 'X-Requested-With': 'zainvpn', 'Content-Type': 'application/octet-stream' } });
+    } catch { throw new Error("can't reach the server"); }
+    if (r.status === 401) { location.href = '/login'; return; }
+    let b = null;
+    try { b = await r.json(); } catch { /* not JSON */ }
+    if (!r.ok) throw new Error((b && b.error) || `HTTP ${r.status}`);
+    flash('success', 'Installer uploaded. Friends can download it from the sign-in page now.');
+    announce('Installer uploaded');
+  } catch (e) {
+    flash('error', `Upload failed: ${e.message}`);
+  } finally {
+    state.uploading = false;
+    await refresh();
+  }
+});
+
 async function signOut() {
   try { await fetch('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'zainvpn' } }); } catch { /* go anyway */ }
   location.href = '/login';
@@ -774,6 +825,7 @@ document.addEventListener('click', e => {
   const d = el.dataset;
   switch (d.action) {
     case 'copy': onCopy(el); break;
+    case 'upload-installer': fileInput.click(); break;
     case 'delete-network': askDeleteNetwork(d.name); break;
     case 'remove-device': askRemoveDevice(d); break;
     case 'dismiss': dismiss(Number(d.id)); break;

@@ -339,7 +339,7 @@ summary() {
   printf '  %-12s %-6s %-16s %s\n' "Custom TCP" "$control" "0.0.0.0/0" "clients' control connection"
   printf '  %-12s %-6s %-16s %s\n' "Custom UDP" "$control" "0.0.0.0/0" "peer traffic and hole punching"
   if [ -n "${dash_port:-}" ]; then
-    printf '  %-12s %-6s %-16s %s\n' "Custom TCP" "$dash_port" "My IP only" "this dashboard (never 0.0.0.0/0)"
+    printf '  %-12s %-6s %-16s %s\n' "Custom TCP" "$dash_port" "0.0.0.0/0" "dashboard + installer download (admin pages need the password)"
   fi
   printf '  %s\n' "${DIM}If the server also runs a firewall (ufw, firewalld), open the same ports there.${RESET}"
 

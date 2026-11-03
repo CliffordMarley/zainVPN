@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>zainVPN</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%23ff9900'/%3E%3Cpath d='M8.5 9h11l-11 10h11' fill='none' stroke='%23232f3e' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f2f3f3;
+  --surface: #ffffff;
+  --text: #000716;
+  --text-2: #5f6b7a;
+  --text-label: #414d5c;
+  --divider: #e9ebed;
+  --link: #0972d3;
+  --link-hover: #033160;
+  --focus: #0972d3;
+  --input-bg: #ffffff;
+  --input-border: #7d8998;
+  --placeholder: #5f6b7a;
+  --success: #037f0c;
+  --error: #d91515;
+  --info: #0972d3;
+  --stopped: #5f6b7a;
+  --icon-on: #ffffff;
+  --primary: #ff9900;
+  --primary-hover: #ec7211;
+  --primary-text: #000716;
+  --btn-hover-bg: #f2f8fd;
+  --disabled-bg: #e9ebed;
+  --disabled-text: #9ba7b6;
+  --badge-text: #ffffff;
+  --badge-green: #037f0c;
+  --badge-blue: #0972d3;
+  --nav-bg: #232f3e;
+  --nav-border: #232f3e;
+  --alert-error-bg: #fff7f7;
+  --alert-success-bg: #f2fcf3;
+  --alert-info-bg: #f2f8fd;
+  --code-bg: #fafafa;
+  --overlay: rgba(242, 243, 243, .9);
+  --shadow: 0 0 1px 1px rgba(0, 7, 22, .08), 0 1px 8px 2px rgba(0, 7, 22, .12);
+  --shadow-modal: 0 4px 20px 1px rgba(0, 7, 22, .18);
+  --font: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
+  --mono: Monaco, Menlo, Consolas, "Courier Prime", Courier, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1b2a;
+    --surface: #192534;
+    --text: #d1d5db;
+    --text-2: #8d99a8;
+    --text-label: #c6c6cd;
+    --divider: #414d5c;
+    --link: #539fe5;
+    --link-hover: #89bdee;
+    --focus: #539fe5;
+    --input-bg: #0f1b2a;
+    --input-border: #7d8998;
+    --placeholder: #8d99a8;
+    --success: #29ad32;
+    --error: #ff5d64;
+    --info: #539fe5;
+    --stopped: #8d99a8;
+    --icon-on: #0f1b2a;
+    --primary-text: #0f1b2a;
+    --btn-hover-bg: #1a2c40;
+    --disabled-bg: #2a3a4b;
+    --disabled-text: #7d8998;
+    --badge-text: #0f1b2a;
+    --badge-green: #29ad32;
+    --badge-blue: #539fe5;
+    --nav-bg: #0f1b2a;
+    --nav-border: #414d5c;
+    --alert-error-bg: #270a11;
+    --alert-success-bg: #001a02;
+    --alert-info-bg: #00142b;
+    --code-bg: #0f1b2a;
+    --overlay: rgba(15, 27, 42, .9);
+    --shadow: 0 0 1px 1px rgba(0, 7, 22, .5), 0 1px 8px 2px rgba(0, 7, 22, .6);
+    --shadow-modal: 0 4px 20px 1px rgba(0, 7, 22, .8);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/20px var(--font); -webkit-font-smoothing: antialiased;
+}
+a { color: var(--link); text-decoration: none; }
+a:hover { color: var(--link-hover); text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1, h2, p, ol, dl, dd { margin: 0; }
+.secondary { color: var(--text-2); }
+.small { font-size: 12px; line-height: 16px; }
+.skip {
+  position: absolute; left: 8px; top: -40px; z-index: 100; padding: 6px 12px;
+  background: var(--surface); color: var(--link); border-radius: 8px; font-weight: 700;
+}
+.skip:focus { top: 8px; }
+
+/* Top navigation */
+.topnav {
+  position: sticky; top: 0; z-index: 20; height: 48px; padding: 0 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  background: var(--nav-bg); border-bottom: 1px solid var(--nav-border); color: #fff;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px; color: #fff;
+  font-size: 18px; line-height: 22px; font-weight: 700; letter-spacing: .2px;
+}
+.brand:hover { color: #fff; text-decoration: none; }
+.brand svg { width: 28px; height: 28px; flex: none; }
+.nav-right { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.topnav .status { color: #fff; white-space: nowrap; }
+.topnav .status-success svg { color: #29ad32; }
+.topnav .status-error svg { color: #ff5d64; }
+.topnav .status-progress svg { color: #539fe5; }
+.topnav .status-stopped svg { color: #8d99a8; }
+.nav-version { color: #b6bec9; font-size: 12px; }
+
+/* Page */
+main { max-width: 1280px; margin: 0 auto; padding: 16px 40px 32px; }
+.breadcrumbs ol { list-style: none; padding: 0; display: flex; flex-wrap: wrap; font-size: 12px; line-height: 16px; }
+.breadcrumbs li { display: flex; align-items: center; color: var(--text-2); }
+.breadcrumbs li + li::before {
+  content: ""; width: 6px; height: 6px; margin: 0 10px 0 8px;
+  border-right: 1.5px solid var(--text-2); border-top: 1.5px solid var(--text-2); transform: rotate(45deg);
+}
+.breadcrumbs a { color: var(--link); }
+.page-header { margin: 12px 0 20px; }
+h1 { font-size: 24px; line-height: 30px; font-weight: 700; }
+.page-header p { margin-top: 4px; color: var(--text-2); }
+footer { text-align: center; color: var(--text-2); font-size: 12px; line-height: 16px; padding: 4px 0 24px; }
+
+/* Containers */
+.container { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 20px; min-width: 0; }
+.container-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 16px; padding: 16px 20px; }
+.container-header h2, .summary-title { font-size: 18px; line-height: 22px; font-weight: 700; }
+.container-header .desc, .summary-desc { display: block; margin-top: 4px; color: var(--text-2); font-weight: 400; font-size: 14px; line-height: 20px; }
+.counter { color: var(--text-2); font-weight: 400; }
+.container-body { padding: 0 20px 20px; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; margin-bottom: 20px; }
+.grid-2 > .container { margin-bottom: 0; }
+
+/* Key-value overview */
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kv-col { display: flex; flex-direction: column; gap: 16px; padding: 0 20px; border-left: 1px solid var(--divider); min-width: 0; }
+.kv-col:first-child { padding-left: 0; border-left: 0; }
+.kv dt { font-weight: 700; color: var(--text-2); margin-bottom: 2px; }
+.kv dd { overflow-wrap: anywhere; }
+.kv dd .small { margin-top: 2px; }
+.ip { font-variant-numeric: tabular-nums; }
+
+/* Status indicators */
+.status { display: inline-flex; align-items: flex-start; gap: 6px; vertical-align: top; }
+.status svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.status-success { color: var(--success); }
+.status-error { color: var(--error); }
+.status-progress { color: var(--info); }
+.status-stopped { color: var(--stopped); }
+.on { stroke: var(--icon-on); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 32px; padding: 4px 20px; border: 2px solid var(--link); border-radius: 20px;
+  background: transparent; color: var(--link); font: inherit; font-weight: 700; line-height: 20px;
+  cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: var(--btn-hover-bg); border-color: var(--link-hover); color: var(--link-hover); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); color: var(--primary-text); }
+.btn-link { border-color: transparent; }
+.btn-link:hover { border-color: transparent; }
+.btn:disabled, .btn:disabled:hover { cursor: default; background: transparent; border-color: var(--disabled-bg); color: var(--disabled-text); }
+.btn-primary:disabled, .btn-primary:disabled:hover { background: var(--disabled-bg); }
+.btn-link:disabled, .btn-link:disabled:hover { border-color: transparent; }
+.btn svg { width: 16px; height: 16px; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-label); cursor: pointer;
+}
+.icon-btn:hover { color: var(--link); background: var(--btn-hover-bg); }
+.icon-btn svg { width: 16px; height: 16px; }
+.copy-wrap { position: relative; display: inline-flex; align-items: center; gap: 2px; margin: -4px 0; }
+.popover {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 5;
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; white-space: nowrap;
+  background: var(--surface); color: var(--text); border: 1px solid var(--divider); border-radius: 8px;
+  box-shadow: var(--shadow-modal); font-size: 12px; line-height: 16px; font-weight: 400;
+}
+.popover svg { width: 14px; height: 14px; color: var(--success); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; min-width: 600px; border-collapse: collapse; }
+th {
+  position: relative; padding: 8px 12px; text-align: left; white-space: nowrap;
+  font-weight: 700; color: var(--text-label); border-bottom: 1px solid var(--divider);
+}
+th:not(:last-child)::after {
+  content: ""; position: absolute; right: 0; top: 50%; height: 16px; margin-top: -8px;
+  border-right: 1px solid var(--divider);
+}
+td { padding: 11px 12px; border-bottom: 1px solid var(--divider); vertical-align: middle; }
+th:first-child, td:first-child { padding-left: 0; }
+tbody tr:last-child td { border-bottom: 0; }
+td.name { font-weight: 700; overflow-wrap: anywhere; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.empty { text-align: center; padding: 24px 16px 12px; }
+.empty b { display: block; }
+.empty p { color: var(--text-2); margin-top: 2px; }
+.badge {
+  display: inline-block; padding: 0 10px; border-radius: 999px; font-size: 12px; line-height: 20px;
+  font-weight: 700; color: var(--badge-text); background: var(--text-label); cursor: default;
+}
+.badge-green { background: var(--badge-green); }
+.badge-blue { background: var(--badge-blue); }
+
+/* Forms */
+.field { margin-bottom: 16px; }
+.field label { display: block; font-weight: 700; margin-bottom: 4px; }
+.input {
+  display: block; width: 100%; height: 32px; padding: 4px 12px;
+  border: 1px solid var(--input-border); border-radius: 8px;
+  background: var(--input-bg); color: var(--text); font: inherit;
+}
+.input::placeholder { color: var(--placeholder); font-style: italic; opacity: 1; }
+.input:focus, .input:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+.input[aria-invalid="true"] { border-color: var(--error); border-left-width: 4px; padding-left: 9px; }
+.hint { margin-top: 4px; color: var(--text-2); font-size: 12px; line-height: 16px; }
+.field-error { display: flex; gap: 4px; margin-top: 4px; color: var(--error); font-size: 12px; line-height: 16px; }
+.field-error svg { width: 14px; height: 14px; flex: none; margin-top: 1px; }
+.form-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+#form-alert:not(:empty) { margin-top: 4px; }
+
+/* Alerts */
+.alert {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px 10px 14px;
+  border: 1px solid var(--info); border-left-width: 4px; border-radius: 8px; background: var(--alert-info-bg);
+}
+.alert > svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.alert-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.alert-title { font-weight: 700; }
+.alert-error { border-color: var(--error); background: var(--alert-error-bg); }
+.alert-error > svg { color: var(--error); }
+.alert-success { border-color: var(--success); background: var(--alert-success-bg); }
+.alert-success > svg { color: var(--success); }
+.alert .icon-btn { margin: -4px -4px -4px 0; }
+.page-alert { margin-bottom: 20px; }
+
+/* How to play */
+.steps { list-style: none; padding: 0; counter-reset: step; display: flex; flex-direction: column; gap: 14px; }
+.steps li { counter-increment: step; display: flex; gap: 12px; }
+.steps li::before {
+  content: counter(step); flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--text-label); color: var(--text-label); font-size: 12px; font-weight: 700;
+}
+.steps b { display: block; }
+.steps span { color: var(--text-2); }
+
+/* Expandable section */
+details.expandable { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 20px; }
+details.expandable > summary {
+  list-style: none; cursor: pointer; display: flex; gap: 8px; align-items: flex-start;
+  padding: 16px 20px; border-radius: 16px;
+}
+details.expandable > summary::-webkit-details-marker { display: none; }
+details.expandable > summary:focus-visible { outline-offset: -2px; }
+.caret { width: 16px; height: 16px; flex: none; margin-top: 3px; color: var(--text-label); transform: rotate(-90deg); transition: transform .15s ease; }
+details[open] .caret { transform: none; }
+@media (prefers-reduced-motion: reduce) { .caret { transition: none; } }
+.log-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.logbox {
+  margin: 0; max-height: 360px; overflow: auto; padding: 12px 16px;
+  background: var(--code-bg); border: 1px solid var(--divider); border-radius: 8px;
+  font: 12px/18px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text);
+}
+
+/* Modal */
+dialog.modal {
+  width: min(560px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 16px;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-modal);
+}
+dialog.modal::backdrop { background: var(--overlay); }
+.modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 16px 20px; }
+.modal-header h2 { font-size: 18px; line-height: 22px; font-weight: 700; padding-top: 3px; }
+.modal-body { padding: 0 20px 20px; }
+.modal-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--divider); }
+
+@media (max-width: 912px) {
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 688px) {
+  .topnav { padding: 0 16px; }
+  .nav-version { display: none; }
+  main { padding: 12px 16px 24px; }
+  .kv { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .kv-col { padding: 0; border-left: 0; }
+  .container-header, .modal-header { padding: 16px; }
+  .container-body, .modal-body { padding: 0 16px 16px; }
+  details.expandable > summary { padding: 16px; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+
+<header class="topnav">
+  <a class="brand" href="/" aria-label="zainVPN home">
+    <svg viewBox="0 0 28 28" aria-hidden="true" focusable="false"><rect width="28" height="28" rx="7" fill="#ff9900"/><path d="M8.5 9h11l-11 10h11" fill="none" stroke="#232f3e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>zainVPN</span>
+  </a>
+  <div class="nav-right">
+    <span class="nav-version" id="nav-version"></span>
+    <span id="nav-status" class="status status-progress" role="status" aria-live="polite"></span>
+  </div>
+</header>
+
+<main id="main">
+  <nav class="breadcrumbs" aria-label="Breadcrumbs">
+    <ol><li><a href="/">zainVPN</a></li><li><span aria-current="page">Dashboard</span></li></ol>
+  </nav>
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <p>Your virtual LAN for playing games with friends over the internet.</p>
+  </div>
+
+  <div id="banner" class="alert alert-error page-alert" role="alert" hidden>
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="on" d="M5.6 5.6l4.8 4.8m0-4.8l-4.8 4.8" fill="none" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <div class="alert-body">
+      <div class="alert-title">Can't reach the zainVPN service</div>
+      <div>It starts automatically with Windows and restarts itself if it stops. Retrying… If this doesn't go away, reinstall zainVPN.</div>
+    </div>
+  </div>
+
+  <section class="container" aria-labelledby="pc-title">
+    <div class="container-header">
+      <div><h2 id="pc-title">This PC</h2><span class="desc">How your friends see this computer on the virtual LAN.</span></div>
+    </div>
+    <div class="container-body">
+      <div class="kv">
+        <dl class="kv-col">
+          <div><dt>Nickname</dt><dd id="v-name">—</dd></div>
+          <div><dt>Virtual IP</dt><dd>
+            <span class="copy-wrap"><span id="v-ip" class="ip">—</span>
+              <button type="button" class="icon-btn" id="copy-ip" aria-label="Copy virtual IP" title="Copy virtual IP" hidden></button>
+            </span>
+          </dd></div>
+        </dl>
+        <dl class="kv-col">
+          <div><dt>Network</dt><dd id="v-network">—</dd></div>
+          <div><dt>Coordinator</dt><dd id="v-server">—</dd></div>
+        </dl>
+        <dl class="kv-col">
+          <div><dt>Connection</dt><dd aria-live="polite"><span id="v-conn" class="status"></span><div id="v-conn-msg" class="secondary small" hidden></div></dd></div>
+          <div><dt>Relay</dt><dd><span id="v-relay" class="status"></span><div id="v-relay-msg" class="secondary small" hidden></div></dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="container" aria-labelledby="players-title">
+    <div class="container-header">
+      <div>
+        <h2 id="players-title">Players <span class="counter" id="players-count"></span></h2>
+        <span class="desc">Friends in your network. Games they host in LAN mode show up in your game automatically.</span>
+      </div>
+    </div>
+    <div class="container-body">
+      <div class="table-wrap" role="region" aria-labelledby="players-title" tabindex="0">
+        <table>
+          <thead><tr><th scope="col">Name</th><th scope="col">Virtual IP</th><th scope="col">Status</th><th scope="col">Connection</th><th scope="col">Ping</th></tr></thead>
+          <tbody id="peer-rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="peers-empty" hidden>
+        <b>No one else is here yet</b>
+        <p>Send your friends the zainVPN installer. They'll show up here once they connect.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid-2">
+    <section class="container" aria-labelledby="settings-title">
+      <div class="container-header">
+        <div><h2 id="settings-title">Settings</h2><span class="desc">Changes apply right away; zainVPN reconnects automatically.</span></div>
+      </div>
+      <form class="container-body" id="settings" novalidate>
+        <div class="field">
+          <label for="f-name">Nickname</label>
+          <input class="input" id="f-name" name="name" autocomplete="off" spellcheck="false" aria-describedby="h-name e-name">
+          <div class="hint" id="h-name">How your friends see you. Up to 32 characters.</div>
+          <div class="field-error" id="e-name" hidden></div>
+        </div>
+        <div class="field">
+          <label for="f-server">Coordinator address</label>
+          <input class="input" id="f-server" name="server" autocomplete="off" spellcheck="false" autocapitalize="off" inputmode="url" aria-describedby="h-server e-server">
+          <div class="hint" id="h-server">Host name or IP address of your group's coordinator, optionally with :port (default 29814).</div>
+          <div class="field-error" id="e-server" hidden></div>
+        </div>
+        <div class="field">
+          <label for="f-network">Network name</label>
+          <input class="input" id="f-network" name="network" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="h-network e-network">
+          <div class="hint" id="h-network">Everyone with the same network name and password plays together.</div>
+          <div class="field-error" id="e-network" hidden></div>
+        </div>
+        <div class="field">
+          <label for="f-password">Network password</label>
+          <input class="input" id="f-password" name="password" type="password" autocomplete="new-password" placeholder="Leave blank to keep the current password" aria-describedby="h-password e-password">
+          <div class="hint" id="h-password">Required when you change the network name.</div>
+          <div class="field-error" id="e-password" hidden></div>
+        </div>
+        <div id="form-alert" aria-live="polite"></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-link" id="reset" disabled>Reset</button>
+          <button type="submit" class="btn btn-primary" id="save">Save</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="container" aria-labelledby="howto-title">
+      <div class="container-header">
+        <div><h2 id="howto-title">How to play</h2><span class="desc">zainVPN makes your friends look like they're on your home network.</span></div>
+      </div>
+      <div class="container-body">
+        <ol class="steps">
+          <li><div><b>Choose LAN or System Link</b><span>In the game's multiplayer menu, pick LAN (sometimes called System Link) instead of Online.</span></div></li>
+          <li><div><b>Join your friends</b><span>Games hosted by friends appear in the game's list automatically.</span></div></li>
+          <li><div><b>Asked for an IP address?</b><span>Use the host's Virtual IP from the Players list. If you're hosting, share yours from This PC.</span></div></li>
+          <li><div><b>Friends can't see your game?</b><span>Allow the game through Windows Firewall when Windows asks, then restart the game.</span></div></li>
+        </ol>
+      </div>
+    </section>
+  </div>
+
+  <details class="expandable" id="logs">
+    <summary>
+      <svg class="caret" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 6h8l-4 5z" fill="currentColor"/></svg>
+      <span><span class="summary-title">Logs</span><span class="summary-desc">Recent activity from the zainVPN service. Handy when something isn't working.</span></span>
+    </summary>
+    <div class="container-body">
+      <div class="log-actions"><button type="button" class="btn" id="copy-logs">Copy logs</button></div>
+      <pre class="logbox" id="logbox" tabindex="0" aria-label="Recent log lines">Loading…</pre>
+    </div>
+  </details>
+
+  <footer id="footer">zainVPN</footer>
+</main>
+
+<dialog class="modal" id="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+  <div class="modal-header">
+    <h2 id="confirm-title"></h2>
+    <button type="button" class="icon-btn" id="confirm-close" aria-label="Close"></button>
+  </div>
+  <div class="modal-body" id="confirm-body"></div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-link" id="confirm-cancel">Cancel</button>
+    <button type="button" class="btn btn-primary" id="confirm-ok"></button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const ICONS = {
+    success: '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="on" d="M4.8 8.2l2.2 2.2 4.2-4.6" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    error: '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="on" d="M5.6 5.6l4.8 4.8m0-4.8l-4.8 4.8" fill="none" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    progress: '<svg class="spin" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="26 12"/></svg>',
+    stopped: '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+    info: '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2v4M8 4.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    copy: '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+    close: '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 3.5l9 9m0-9l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  };
+  const icon = (name) => {
+    const t = document.createElement('template');
+    t.innerHTML = ICONS[name];
+    return t.content.firstChild;
+  };
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  const setText = (e, text) => { if (e.textContent !== text) e.textContent = text; };
+  const norm = (s) => (s || '').trim().toLowerCase();
+
+  // Status indicator: icon + text, only touched when it actually changes.
+  function setStatus(e, type, text) {
+    if (e.dataset.type === type && e.dataset.text === text) return;
+    e.dataset.type = type;
+    e.dataset.text = text;
+    e.className = 'status status-' + type;
+    e.replaceChildren(icon(type), el('span', '', text));
+  }
+  const STATES = {
+    online: ['success', 'Connected'],
+    error: ['error', 'Error'],
+    starting: ['progress', 'Connecting'],
+    connecting: ['progress', 'Connecting'],
+  };
+
+  for (const id of ['copy-ip', 'confirm-close']) $(id).append(icon(id === 'copy-ip' ? 'copy' : 'close'));
+  setStatus($('nav-status'), 'progress', 'Loading');
+  setStatus($('v-conn'), 'progress', 'Loading');
+  setStatus($('v-relay'), 'stopped', 'Unknown');
+
+  async function api(path, opts = {}) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    let res;
+    try {
+      res = await fetch(path, { cache: 'no-store', ...opts, signal: ctrl.signal });
+    } catch (e) {
+      throw new Error("Can't reach the zainVPN service.");
+    } finally {
+      clearTimeout(timer);
+    }
+    let body = null;
+    try { body = await res.json(); } catch (e) { /* not JSON */ }
+    if (!res.ok) throw new Error((body && body.error) || `Request failed (HTTP ${res.status}).`);
+    return body;
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      const ta = el('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.append(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e2) { /* unsupported */ }
+      ta.remove();
+      return ok;
+    }
+  }
+
+  async function copyWithFeedback(btn, text, msg) {
+    const ok = await copyText(text);
+    const wrap = btn.parentElement;
+    wrap.querySelectorAll('.popover').forEach((p) => p.remove());
+    const pop = el('span', 'popover');
+    pop.setAttribute('role', 'status');
+    if (ok) pop.append(icon('success'));
+    pop.append(el('span', '', ok ? msg : 'Press Ctrl+C to copy'));
+    wrap.append(pop);
+    setTimeout(() => pop.remove(), 1800);
+  }
+
+  function makeAlert(type, title, text, dismissible) {
+    const a = el('div', 'alert alert-' + type);
+    a.append(icon(type === 'info' ? 'info' : type));
+    const body = el('div', 'alert-body');
+    if (title) body.append(el('div', 'alert-title', title));
+    if (text) body.append(el('div', '', text));
+    a.append(body);
+    if (dismissible) {
+      const x = el('button', 'icon-btn');
+      x.type = 'button';
+      x.setAttribute('aria-label', 'Dismiss');
+      x.append(icon('close'));
+      x.addEventListener('click', () => a.remove());
+      a.append(x);
+    }
+    return a;
+  }
+
+  // ---- This PC ----
+  let current = null;
+  $('copy-ip').addEventListener('click', (e) => {
+    if (current && current.status.ip) copyWithFeedback(e.currentTarget, current.status.ip, 'Virtual IP copied');
+  });
+
+  function renderPC(st, type, label) {
+    setText($('v-name'), st.name || '—');
+    setText($('v-ip'), st.ip || '—');
+    $('copy-ip').hidden = !st.ip;
+    setText($('v-network'), st.network || '—');
+    setText($('v-server'), st.server || '—');
+    setStatus($('v-conn'), type, label);
+    const msg = $('v-conn-msg');
+    setText(msg, st.message || '');
+    msg.hidden = !st.message;
+
+    const relayMsg = $('v-relay-msg');
+    let note = '';
+    if (st.relay) {
+      setStatus($('v-relay'), 'success', 'Available');
+    } else if (st.state === 'online') {
+      setStatus($('v-relay'), 'error', 'Unavailable');
+      note = 'UDP to the coordinator seems blocked. Friends can only reach you directly.';
+    } else {
+      setStatus($('v-relay'), 'stopped', 'Unavailable');
+    }
+    setText(relayMsg, note);
+    relayMsg.hidden = !note;
+  }
+
+  // ---- Players ----
+  const rows = new Map(); // ip -> row parts
+  const tbody = $('peer-rows');
+
+  function newRow() {
+    const r = { tr: el('tr') };
+    r.name = el('td', 'name');
+    const ipCell = el('td', 'num');
+    const wrap = el('span', 'copy-wrap');
+    r.ip = el('span', 'ip');
+    r.copy = el('button', 'icon-btn');
+    r.copy.type = 'button';
+    r.copy.append(icon('copy'));
+    r.copy.addEventListener('click', () => copyWithFeedback(r.copy, r.ipValue, 'Virtual IP copied'));
+    wrap.append(r.ip, r.copy);
+    ipCell.append(wrap);
+    r.statusCell = el('td');
+    r.status = el('span', 'status');
+    r.statusCell.append(r.status);
+    r.conn = el('td');
+    r.ping = el('td', 'num');
+    r.tr.append(r.name, ipCell, r.statusCell, r.conn, r.ping);
+    return r;
+  }
+
+  function setConnection(cell, text, cls, tip) {
+    const key = text + '|' + tip;
+    if (cell.dataset.key === key) return;
+    cell.dataset.key = key;
+    if (!text) {
+      cell.replaceChildren(el('span', 'secondary', '—'));
+      return;
+    }
+    const b = el('span', 'badge ' + cls, text);
+    b.title = tip;
+    b.setAttribute('aria-label', `${text}: ${tip}`);
+    cell.replaceChildren(b);
+  }
+
+  const fmtMs = (v) => (v < 10 ? v.toFixed(1) : String(Math.round(v))) + ' ms';
+
+  function renderPeers(peers, server) {
+    setText($('players-count'), `(${peers.length})`);
+    $('peers-empty').hidden = peers.length > 0;
+    const ips = new Set(peers.map((p) => p.ip));
+    for (const [ip, r] of rows) {
+      if (!ips.has(ip)) { r.tr.remove(); rows.delete(ip); }
+    }
+    peers.forEach((p, i) => {
+      let r = rows.get(p.ip);
+      if (!r) { r = newRow(); rows.set(p.ip, r); }
+      const name = p.name || 'player';
+      r.ipValue = p.ip;
+      setText(r.name, name);
+      setText(r.ip, p.ip);
+      r.copy.setAttribute('aria-label', `Copy ${name}'s virtual IP`);
+      r.copy.title = 'Copy virtual IP';
+      setStatus(r.status, p.online ? 'success' : 'stopped', p.online ? 'Online' : 'Offline');
+      if (p.path === 'direct') {
+        setConnection(r.conn, 'Direct', 'badge-green', 'Direct connection to ' + (p.endpoint || 'peer'));
+      } else if (p.path === 'relay') {
+        setConnection(r.conn, 'Relayed', 'badge-blue', 'Relayed through the coordinator' + (server ? ` (${server})` : ''));
+      } else {
+        setConnection(r.conn, '', '', '');
+      }
+      setText(r.ping, p.online && p.rttMs >= 0 ? fmtMs(p.rttMs) : '—');
+      if (tbody.children[i] !== r.tr) tbody.insertBefore(r.tr, tbody.children[i] || null);
+    });
+  }
+
+  // ---- Settings ----
+  const form = $('settings');
+  const fields = { name: $('f-name'), server: $('f-server'), network: $('f-network'), password: $('f-password') };
+  let savedCfg = null, dirty = false, saving = false;
+
+  function fillForm(cfg) {
+    fields.name.value = cfg.name || '';
+    fields.server.value = cfg.server || '';
+    fields.network.value = cfg.network || '';
+    fields.password.value = '';
+    dirty = false;
+    $('reset').disabled = true;
+    showErrors({});
+  }
+
+  function syncForm(cfg) {
+    const same = savedCfg && ['name', 'server', 'network', 'hasPassword'].every((k) => savedCfg[k] === cfg[k]);
+    savedCfg = cfg;
+    fields.password.placeholder = cfg.hasPassword ? 'Leave blank to keep the current password' : 'Enter the network password';
+    if (!same && !dirty && !saving) fillForm(cfg);
+  }
+
+  function validate(v) {
+    const errs = {};
+    if (!v.name) errs.name = 'Enter a nickname.';
+    else if ([...v.name].length > 32) errs.name = 'Use 32 characters or fewer.';
+    if (!v.server) errs.server = 'Enter the coordinator address.';
+    else if (/^[a-z][a-z0-9+.-]*:\/\/|[\s/\\@?#]/i.test(v.server)) errs.server = 'Enter just a host name or IP address, optionally with :port. For example: 203.0.113.10 or vpn.example.com:29814';
+    if (!v.network) errs.network = 'Enter a network name.';
+    else if (norm(v.network).length > 64) errs.network = 'Use 64 characters or fewer.';
+    if (!v.password && (!savedCfg.hasPassword || norm(v.network) !== norm(savedCfg.network))) {
+      errs.password = 'Enter the password for this network.';
+    }
+    return errs;
+  }
+
+  function showErrors(errs) {
+    for (const k of Object.keys(fields)) {
+      const box = $('e-' + k);
+      if (errs[k]) {
+        box.replaceChildren(icon('error'), el('span', '', errs[k]));
+        box.hidden = false;
+        fields[k].setAttribute('aria-invalid', 'true');
+      } else {
+        box.hidden = true;
+        box.replaceChildren();
+        fields[k].removeAttribute('aria-invalid');
+      }
+    }
+  }
+
+  function formAlert(a) {
+    $('form-alert').replaceChildren(...(a ? [a] : []));
+  }
+
+  form.addEventListener('input', () => {
+    dirty = true;
+    $('reset').disabled = false;
+  });
+  $('reset').addEventListener('click', () => {
+    if (savedCfg) fillForm(savedCfg);
+    formAlert(null);
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (saving || !savedCfg) return;
+    const v = {
+      name: fields.name.value.trim(),
+      server: fields.server.value.trim(),
+      network: fields.network.value.trim(),
+      password: fields.password.value,
+    };
+    const errs = validate(v);
+    showErrors(errs);
+    const first = Object.keys(errs)[0];
+    if (first) { fields[first].focus(); return; }
+
+    if (savedCfg.network && savedCfg.hasPassword) {
+      const oldNet = savedCfg.network, oldSrv = savedCfg.server || '';
+      let ok = true;
+      if (norm(v.network) !== norm(oldNet)) {
+        ok = await confirmDialog('Switch network?',
+          `You'll leave "${oldNet}" and join "${v.network}". Friends in "${oldNet}" will see you as offline, and you may get a different virtual IP.`,
+          'Switch network');
+      } else if (norm(v.server) !== norm(oldSrv)) {
+        ok = await confirmDialog('Change coordinator?',
+          `zainVPN will disconnect from ${oldSrv} and connect to ${v.server}. Only friends using the same coordinator can see you.`,
+          'Change coordinator');
+      }
+      if (!ok) return;
+    }
+    save(v);
+  });
+
+  async function save(v) {
+    saving = true;
+    const btn = $('save');
+    btn.disabled = true;
+    btn.replaceChildren(icon('progress'), el('span', '', 'Saving'));
+    formAlert(null);
+    try {
+      const d = await api('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-ZainVPN': '1' },
+        body: JSON.stringify(v),
+      });
+      saving = false;
+      dirty = false;
+      savedCfg = null;
+      render(d);
+      formAlert(makeAlert('success', 'Settings saved', 'zainVPN is reconnecting with the new settings.', true));
+    } catch (err) {
+      formAlert(makeAlert('error', "Couldn't save settings", err.message, true));
+    } finally {
+      saving = false;
+      btn.disabled = false;
+      btn.replaceChildren('Save');
+    }
+  }
+
+  // ---- Confirmation modal ----
+  const dlg = $('confirm');
+  function confirmDialog(title, body, okLabel) {
+    if (typeof dlg.showModal !== 'function') return Promise.resolve(window.confirm(body));
+    return new Promise((resolve) => {
+      setText($('confirm-title'), title);
+      setText($('confirm-body'), body);
+      setText($('confirm-ok'), okLabel);
+      const done = (ok) => {
+        dlg.removeEventListener('cancel', onCancel);
+        dlg.removeEventListener('click', onBackdrop);
+        $('confirm-ok').onclick = $('confirm-cancel').onclick = $('confirm-close').onclick = null;
+        dlg.close();
+        resolve(ok);
+      };
+      const onCancel = (ev) => { ev.preventDefault(); done(false); };
+      const onBackdrop = (ev) => { if (ev.target === dlg) done(false); };
+      dlg.addEventListener('cancel', onCancel);
+      dlg.addEventListener('click', onBackdrop);
+      $('confirm-ok').onclick = () => done(true);
+      $('confirm-cancel').onclick = $('confirm-close').onclick = () => done(false);
+      dlg.showModal();
+      $('confirm-cancel').focus();
+    });
+  }
+
+  // ---- Status polling ----
+  function render(d) {
+    current = d;
+    const st = d.status;
+    const [type, label] = STATES[st.state] || STATES.connecting;
+    setStatus($('nav-status'), type, label);
+    setText($('nav-version'), d.version);
+    setText($('footer'), 'zainVPN ' + d.version);
+    renderPC(st, type, label);
+    renderPeers(st.peers || [], st.server);
+    syncForm(d.config);
+  }
+
+  let failures = 0, pollTimer = 0, polling = false;
+  function setBanner(on) {
+    $('banner').hidden = !on;
+    if (on) {
+      setStatus($('nav-status'), 'error', 'Not running');
+      setStatus($('v-conn'), 'error', 'Service not running');
+      setStatus($('v-relay'), 'stopped', 'Unknown');
+      $('v-conn-msg').hidden = $('v-relay-msg').hidden = true;
+    }
+  }
+  async function poll() {
+    if (polling) return;
+    polling = true;
+    clearTimeout(pollTimer);
+    try {
+      const d = await api('/api/status');
+      failures = 0;
+      setBanner(false);
+      render(d);
+    } catch (e) {
+      failures++;
+      if (failures >= 2 || !current) setBanner(true);
+    } finally {
+      polling = false;
+    }
+    pollTimer = setTimeout(poll, document.hidden ? 15000 : 2500);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+
+  // ---- Logs ----
+  const logs = $('logs'), logbox = $('logbox');
+  let logTimer = 0;
+  async function loadLogs() {
+    try {
+      const d = await api('/api/logs');
+      const lines = d.lines || [];
+      const text = lines.length ? lines.join('\n') : 'No log lines yet.';
+      if (logbox.textContent !== text) {
+        const atBottom = logbox.scrollTop + logbox.clientHeight >= logbox.scrollHeight - 8;
+        logbox.textContent = text;
+        if (atBottom) logbox.scrollTop = logbox.scrollHeight;
+      }
+    } catch (e) { /* the status banner already says so */ }
+  }
+  logs.addEventListener('toggle', () => {
+    clearInterval(logTimer);
+    if (logs.open) {
+      loadLogs();
+      logTimer = setInterval(loadLogs, 3000);
+    }
+  });
+  $('copy-logs').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const ok = await copyText(logbox.textContent);
+    btn.textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(() => { btn.textContent = 'Copy logs'; }, 1500);
+  });
+
+  poll();
+})();
+</script>
+</body>
+</html>

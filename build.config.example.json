@@ -1,0 +1,7 @@
+{
+  "_comment": "Copy to build.config.json (gitignored). build.ps1 uses these when -Server/-Network/-Password/-Name are not given. server is host or host:port (default port 29814). Leave name empty so each friend picks a nickname.",
+  "server": "203.0.113.10",
+  "network": "blur",
+  "password": "change-me",
+  "name": ""
+}

@@ -20,7 +20,7 @@ import (
 const Version = 1
 
 // DefaultPort is the coordinator's port for both TCP (control) and UDP (relay).
-const DefaultPort = 7777
+const DefaultPort = 29814
 
 // UDP packet types.
 const (

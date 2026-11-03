@@ -112,7 +112,8 @@ func New(statePath string, logger *log.Logger) (*Server, error) {
 	return s, nil
 }
 
-// Serve runs the coordinator on the given listeners until both are closed.
+// Serve runs the coordinator on the given listeners. It returns once ln is
+// closed; close udp too to stop the relay.
 func (s *Server) Serve(ln net.Listener, udp *net.UDPConn) error {
 	s.udp = udp
 	go s.serveUDP()
@@ -377,7 +378,8 @@ func (s *Server) register(session [proto.SessionLen]byte, from netip.AddrPort) {
 
 	s.udp.WriteToUDPAddrPort([]byte{proto.TypeRegisterAck}, from)
 	if changed {
-		s.broadcastPeers(m.nw)
+		// Not on the UDP goroutine: a slow TCP peer must not stall the relay.
+		go s.broadcastPeers(m.nw)
 	}
 }
 
@@ -515,7 +517,7 @@ func (s *Server) DeleteNetwork(name string) error {
 }
 
 // RemoveDevice disconnects a device and frees its IP. If the device still has
-// the password it can rejoin, and will get a new IP.
+// the password it can rejoin, and then gets the lowest free IP (often its old one).
 func (s *Server) RemoveDevice(networkName, deviceID string) error {
 	s.mu.Lock()
 	nw := s.networks[proto.NormalizeNetwork(networkName)]

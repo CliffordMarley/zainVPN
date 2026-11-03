@@ -76,7 +76,8 @@ type Engine struct {
 	lastAck   time.Time
 	peers     map[netip.Addr]*peer
 
-	noDirect bool // tests: force everything through the relay
+	noDirect bool           // tests: force everything through the relay
+	bind     netip.AddrPort // tests: UDP bind address (default: all interfaces)
 }
 
 type peer struct {
@@ -113,7 +114,7 @@ func (e *Engine) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	udp, err := net.ListenUDP("udp4", &net.UDPAddr{})
+	udp, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(e.bind))
 	if err != nil {
 		return fmt.Errorf("open UDP socket: %w", err)
 	}
@@ -349,7 +350,11 @@ func (e *Engine) tick(now time.Time) {
 func (e *Engine) controlLoop(ctx context.Context) {
 	backoff := time.Second
 	for ctx.Err() == nil {
-		e.setState(StateConnecting, "")
+		e.mu.Lock()
+		if e.state != StateError { // keep a refusal visible while retrying
+			e.state, e.message = StateConnecting, ""
+		}
+		e.mu.Unlock()
 		start := time.Now()
 		err := e.runSession(ctx)
 		if ctx.Err() != nil {
@@ -540,6 +545,9 @@ func usableEndpoint(ap netip.AddrPort) bool {
 // localEndpoints lists this machine's LAN addresses with our UDP port, so
 // friends on the same LAN can connect without going out to the internet.
 func (e *Engine) localEndpoints() []string {
+	if e.bind.Addr().IsLoopback() {
+		return nil
+	}
 	port := e.udp.LocalAddr().(*net.UDPAddr).Port
 	addrs, _ := net.InterfaceAddrs()
 	var out []string

@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>zainVPN Coordinator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23ff9900'/%3E%3Cpath d='M7 7h10L7 17h10' fill='none' stroke='%23232f3e' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style nonce="{{NONCE}}">
+:root {
+  --font: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
+  --mono: Monaco, Menlo, Consolas, "Courier New", monospace;
+  --bg: #f2f3f3;
+  --surface: #ffffff;
+  --text: #000716;
+  --text-2: #5f6b7a;
+  --label: #414d5c;
+  --divider: #e9ebed;
+  --link: #0972d3;
+  --link-hover: #033160;
+  --input-border: #7d8998;
+  --input-bg: #ffffff;
+  --primary: #ff9900;
+  --primary-hover: #ec7211;
+  --primary-text: #000716;
+  --btn-hover-bg: #f2f8fd;
+  --btn-active-bg: #d3e7f9;
+  --disabled-bg: #e9ebed;
+  --disabled-text: #9ba7b6;
+  --success: #037f0c;
+  --error: #d91515;
+  --info: #0972d3;
+  --warning: #8d6605;
+  --stopped: #5f6b7a;
+  --alert-success-bg: #f2fcf3;
+  --alert-error-bg: #fff7f7;
+  --alert-info-bg: #f2f8fd;
+  --alert-warning-bg: #fffce9;
+  --warning-border: #ffe347;
+  --code-bg: #f4f4f4;
+  --badge-bg: #414d5c;
+  --badge-text: #ffffff;
+  --topbar: #232f3e;
+  --topbar-border: #232f3e;
+  --topbar-text: #ffffff;
+  --topbar-text-2: #d1d5db;
+  --focus: #0972d3;
+  --shadow: 0 0 1px 1px rgba(0, 7, 22, .08), 0 1px 8px 2px rgba(0, 7, 22, .12);
+  --backdrop: rgba(35, 43, 55, .7);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1b2a;
+    --surface: #192534;
+    --text: #d1d5db;
+    --text-2: #8d99a8;
+    --label: #b6bec9;
+    --divider: #414d5c;
+    --link: #539fe5;
+    --link-hover: #89bdee;
+    --input-border: #5f6b7a;
+    --input-bg: #0f1b2a;
+    --primary-text: #0f1b2a;
+    --btn-hover-bg: #00142b;
+    --btn-active-bg: #002b66;
+    --disabled-bg: #232f3e;
+    --disabled-text: #687078;
+    --success: #29ad32;
+    --error: #ff5d64;
+    --info: #539fe5;
+    --warning: #ffe347;
+    --stopped: #8d99a8;
+    --alert-success-bg: #001a02;
+    --alert-error-bg: #1a0000;
+    --alert-info-bg: #00142b;
+    --alert-warning-bg: #191100;
+    --warning-border: #ffe347;
+    --code-bg: #0f1b2a;
+    --badge-bg: #414d5c;
+    --topbar: #0f1b2a;
+    --topbar-border: #414d5c;
+    --focus: #539fe5;
+    --shadow: 0 0 1px 1px rgba(0, 7, 22, .4), 0 1px 8px 2px rgba(0, 7, 22, .6);
+    --backdrop: rgba(15, 27, 42, .75);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 14px/20px var(--font); }
+a { color: var(--link); text-underline-offset: 2px; }
+a:hover { color: var(--link-hover); }
+.link-plain { text-decoration: none; }
+.link-plain:hover { text-decoration: underline; }
+code, .mono { font-family: var(--mono); font-size: 13px; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1:focus, main:focus { outline: none; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip { position: absolute; left: -9999px; top: 8px; z-index: 2000; padding: 8px 12px; border-radius: 8px; background: var(--surface); color: var(--link); font-weight: 700; }
+.skip:focus { left: 16px; }
+svg { flex: none; }
+
+/* Top navigation */
+.topnav { position: sticky; top: 0; z-index: 1000; height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 20px; background: var(--topbar); color: var(--topbar-text); border-bottom: 1px solid var(--topbar-border); }
+.topnav :focus-visible { outline-color: #539fe5; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--topbar-text); font-size: 16px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.brand:hover { color: var(--topbar-text); }
+.brand span { overflow: hidden; text-overflow: ellipsis; }
+.topnav-spacer { flex: 1; }
+.topnav-version { color: var(--topbar-text-2); font-size: 12px; white-space: nowrap; }
+.topnav-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--topbar-text); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.topnav-btn:hover { color: #ff9900; }
+.topnav-toggle { display: none; padding: 6px; }
+
+/* Layout and side navigation */
+.layout { display: flex; align-items: flex-start; min-height: calc(100vh - 48px); }
+.sidenav { position: sticky; top: 48px; flex: 0 0 240px; width: 240px; height: calc(100vh - 48px); overflow-y: auto; padding-bottom: 16px; background: var(--surface); border-right: 1px solid var(--divider); }
+.sidenav-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 20px 20px 12px 24px; }
+.sidenav-head a { color: var(--text); font-size: 18px; line-height: 22px; font-weight: 700; text-decoration: none; }
+.sidenav .sidenav-close { display: none; }
+.sidenav ul { list-style: none; margin: 0; padding: 4px 0; }
+.sidenav li a { display: block; padding: 6px 24px; color: var(--label); text-decoration: none; }
+.sidenav li a:hover { color: var(--link); }
+.sidenav li a[aria-current="page"] { color: var(--link); font-weight: 700; }
+.sidenav hr { margin: 12px 24px; border: 0; border-top: 1px solid var(--divider); }
+.sidenav-foot { padding: 0 24px; color: var(--text-2); font-size: 12px; line-height: 16px; }
+.nav-backdrop { position: fixed; inset: 48px 0 0 0; z-index: 800; background: var(--backdrop); }
+.content { flex: 1 1 0; min-width: 0; padding: 24px 40px 40px; }
+
+/* Page header and breadcrumbs */
+.breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0 0 8px; padding: 0; list-style: none; font-size: 12px; line-height: 16px; }
+.breadcrumbs li { display: flex; align-items: center; color: var(--text-2); overflow-wrap: anywhere; }
+.breadcrumbs li + li::before { content: ""; width: 6px; height: 6px; margin: 0 10px 0 8px; border: solid var(--text-2); border-width: 1.5px 1.5px 0 0; transform: rotate(45deg); }
+.page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; margin-bottom: 20px; }
+.page-header > div:first-child { min-width: 0; }
+.page-header h1 { margin: 0; font-size: 24px; line-height: 30px; font-weight: 700; overflow-wrap: anywhere; }
+.page-header p { margin-top: 4px; color: var(--text-2); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Containers */
+.container { margin-bottom: 20px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.container-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; padding: 16px 20px; }
+.container-header > div:first-child { min-width: 0; }
+.container-header h2 { margin: 0; font-size: 18px; line-height: 22px; font-weight: 700; }
+.counter { color: var(--text-2); font-weight: 400; }
+.container-header p { margin-top: 4px; color: var(--text-2); }
+.container-body { padding: 0 20px 20px; }
+.container-body h3 { margin: 20px 0 8px; font-size: 16px; line-height: 20px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 4px 20px; border: 2px solid var(--link); border-radius: 20px; background: transparent; color: var(--link); font: inherit; font-weight: 700; line-height: 20px; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.btn:hover { border-color: var(--link-hover); background: var(--btn-hover-bg); color: var(--link-hover); }
+.btn:active { background: var(--btn-active-bg); }
+.btn-primary { border-color: var(--primary); background: var(--primary); color: var(--primary-text); }
+.btn-primary:hover, .btn-primary:active { border-color: var(--primary-hover); background: var(--primary-hover); color: var(--primary-text); }
+.btn-link { border-color: transparent; }
+.btn-link:hover { border-color: transparent; }
+.btn:disabled, .btn:disabled:hover { border-color: var(--disabled-bg); background: var(--disabled-bg); color: var(--disabled-text); cursor: default; }
+.btn-link:disabled, .btn-link:disabled:hover { border-color: transparent; background: transparent; }
+.btn svg { width: 16px; height: 16px; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--text-2); cursor: pointer; }
+.icon-btn:hover { color: var(--text); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+/* Status indicators and badges */
+.si { display: inline-flex; align-items: flex-start; gap: 6px; }
+.si svg { width: 16px; height: 16px; margin-top: 2px; }
+.si-success { color: var(--success); }
+.si-error { color: var(--error); }
+.si-pending, .si-info { color: var(--info); }
+.si-stopped { color: var(--stopped); }
+.cut { fill: none; stroke: var(--cut, var(--surface)); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.spin { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
+.badge { display: inline-block; padding: 0 8px; border-radius: 16px; background: var(--badge-bg); color: var(--badge-text); font-size: 12px; line-height: 18px; font-weight: 700; white-space: nowrap; }
+.sub { display: block; color: var(--text-2); font-size: 12px; line-height: 16px; }
+
+/* Key-value overview */
+.kv-wrap { container-type: inline-size; }
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.kv-col { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0 20px; border-left: 1px solid var(--divider); }
+.kv-col:first-child { padding-left: 0; border-left: 0; }
+.kv-col:last-child { padding-right: 0; }
+.kv dt { margin-bottom: 2px; color: var(--text-2); font-weight: 700; }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+@container (max-width: 600px) {
+  .kv { grid-template-columns: 1fr; row-gap: 16px; }
+  .kv-col { padding: 0; border-left: 0; }
+}
+
+/* Tables */
+.table-wrap { margin: 0 -20px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--divider); text-align: left; vertical-align: top; white-space: nowrap; }
+th { padding-top: 8px; color: var(--label); font-weight: 700; }
+th:first-child, td:first-child { padding-left: 20px; }
+th:last-child, td:last-child { padding-right: 20px; }
+tbody tr:last-child td { border-bottom: 0; }
+td .actions { flex-wrap: nowrap; }
+td .btn { margin: -6px 0; }
+td.cell-mid { vertical-align: middle; }
+.strong { font-weight: 700; }
+.empty { padding: 16px 0 8px; color: var(--text-2); text-align: center; }
+.empty b { display: block; margin-bottom: 4px; }
+.empty .btn { margin-top: 12px; }
+
+/* Alerts */
+.flash { display: flex; flex-direction: column; gap: 8px; }
+.flash:not(:empty) { margin-bottom: 20px; }
+.alert { --c: var(--info); --cut: var(--alert-info-bg); display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px 10px 16px; border: 1px solid var(--c); border-left-width: 4px; border-radius: 8px; background: var(--alert-info-bg); color: var(--text); }
+.alert > svg { width: 16px; height: 16px; margin-top: 2px; color: var(--c); }
+.alert-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.alert-title { display: block; font-weight: 700; }
+.alert .icon-btn { width: 24px; height: 24px; margin: -2px -4px -2px 0; }
+.alert-success { --c: var(--success); --cut: var(--alert-success-bg); background: var(--alert-success-bg); }
+.alert-error { --c: var(--error); --cut: var(--alert-error-bg); background: var(--alert-error-bg); }
+.alert-warning { --c: var(--warning); --cut: var(--alert-warning-bg); border-color: var(--warning-border); background: var(--alert-warning-bg); }
+.alert-warning > svg { color: var(--warning); }
+.container-body .alert { margin-top: 20px; }
+
+/* Connect a device */
+.field-label { margin-bottom: 4px; font-weight: 700; }
+.field-desc { margin-top: 4px; color: var(--text-2); }
+.copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.addr { padding: 5px 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); font-size: 14px; font-weight: 700; line-height: 20px; overflow-wrap: anywhere; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.steps li { position: relative; padding: 0 0 16px 40px; counter-increment: step; }
+.steps li:last-child { padding-bottom: 0; }
+.steps li::before { content: counter(step); position: absolute; left: 0; top: -2px; width: 26px; height: 26px; border: 2px solid var(--link); border-radius: 50%; color: var(--link); font-weight: 700; line-height: 22px; text-align: center; }
+.steps p { margin-top: 2px; color: var(--text-2); }
+.cmd-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.cmd { flex: 1; min-width: 0; margin: 0; padding: 6px 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); font: 13px/20px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Modal */
+dialog.modal { width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 0; border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+dialog.modal::backdrop { background: rgba(35, 43, 55, .7); }
+.modal-inner { display: flex; flex-direction: column; }
+.modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 16px 16px 8px 20px; }
+.modal-header h2 { margin: 4px 0 0; font-size: 18px; line-height: 22px; overflow-wrap: anywhere; }
+.modal-body { padding: 8px 20px 20px; overflow-wrap: anywhere; }
+.modal-body p + p { margin-top: 12px; }
+.modal-body .alert { margin-top: 16px; }
+.modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--divider); }
+
+@media (prefers-color-scheme: dark) {
+  dialog.modal::backdrop { background: rgba(15, 27, 42, .75); }
+}
+@media (max-width: 688px) {
+  .topnav { gap: 8px; padding: 0 16px 0 8px; }
+  .topnav-toggle { display: inline-flex; }
+  .brand { font-size: 14px; gap: 8px; }
+  .topnav-version { display: none; }
+  .sidenav { position: fixed; top: 48px; left: 0; bottom: 0; z-index: 900; width: min(280px, 85vw); height: auto; box-shadow: var(--shadow); transform: translateX(-100%); visibility: hidden; transition: transform .2s ease, visibility .2s; }
+  .nav-open .sidenav { transform: none; visibility: visible; transition: transform .2s ease; }
+  .sidenav .sidenav-close { display: inline-flex; }
+  .content { padding: 16px 16px 32px; }
+  .container-header { padding: 16px; }
+  .container-body { padding: 0 16px 16px; }
+  .table-wrap { margin: 0 -16px; }
+  th:first-child, td:first-child { padding-left: 16px; }
+  th:last-child, td:last-child { padding-right: 16px; }
+  .cmd-row { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .sidenav { transition: none; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="topnav">
+  <button type="button" class="topnav-btn topnav-toggle" id="nav-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidenav">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="#/">
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect width="24" height="24" rx="5" fill="#ff9900"/><path d="M7 7h10L7 17h10" fill="none" stroke="#232f3e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>zainVPN Coordinator</span>
+  </a>
+  <span class="topnav-spacer"></span>
+  <span class="topnav-version" id="top-version"></span>
+  <button type="button" class="topnav-btn" data-action="signout">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H6M10.5 11 13.5 8l-3-3M13 8H6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Sign out</span>
+  </button>
+</header>
+<div class="layout">
+  <nav class="sidenav" id="sidenav" aria-label="Main">
+    <div class="sidenav-head">
+      <a href="#/">zainVPN</a>
+      <button type="button" class="icon-btn sidenav-close" data-action="nav-close" aria-label="Close navigation">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3.5 3.5 9 9m0-9-9 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <ul>
+      <li><a href="#/" data-nav="dashboard">Dashboard</a></li>
+      <li><a href="#/networks" data-nav="networks">Networks</a></li>
+    </ul>
+    <hr>
+    <p class="sidenav-foot" id="nav-foot">Updates automatically every few seconds.</p>
+  </nav>
+  <div class="nav-backdrop" id="nav-backdrop" data-action="nav-close" hidden></div>
+  <main class="content" id="main" tabindex="-1">
+    <div class="flash" id="flash" aria-live="polite"></div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<dialog class="modal" id="modal" aria-labelledby="modal-title" aria-describedby="modal-body">
+  <div class="modal-inner">
+    <div class="modal-header">
+      <h2 id="modal-title"></h2>
+      <button type="button" class="icon-btn" data-action="modal-cancel" aria-label="Close dialog">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3.5 3.5 9 9m0-9-9 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-body"></div>
+      <div id="modal-error" aria-live="assertive"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-link" id="modal-cancel" data-action="modal-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="modal-ok"></button>
+    </div>
+  </div>
+</dialog>
+<div class="sr-only" id="sr" aria-live="polite"></div>
+
+<script nonce="{{NONCE}}">
+(() => {
+'use strict';
+
+const POLL_MS = 2500;
+const $ = (sel, root = document) => root.querySelector(sel);
+const view = $('#view');
+const state = { snap: null, skew: 0, error: null, flashes: [], copied: {} };
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const svg = (body, cls = '') => `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${body}</svg>`;
+const ICON = {
+  success: svg('<circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m4.8 8.3 2.2 2.2 4.2-4.6"/>'),
+  error: svg('<circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/>'),
+  info: svg('<circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="M8 7.4v3.8M8 4.8v.1"/>'),
+  warning: svg('<path d="M8 1.5 15 14H1z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path class="cut" d="M8 6v3.5M8 11.8v.1"/>'),
+  stopped: svg('<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2"/>'),
+  pending: svg('<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="26 12"/>', 'spin'),
+  close: svg('<path d="m3.5 3.5 9 9m0-9-9 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'),
+  copy: svg('<rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" fill="none" stroke="currentColor" stroke-width="1.8"/>'),
+  check: svg('<path d="m2.5 8.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'),
+};
+
+// ---- formatting ----
+const nf = new Intl.NumberFormat();
+const num = n => nf.format(n || 0);
+const plural = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
+function bytes(n) {
+  n = n || 0;
+  if (n < 1000) return `${n} B`;
+  const units = ['kB', 'MB', 'GB', 'TB', 'PB'];
+  let i = -1;
+  do { n /= 1000; i++; } while (n >= 1000 && i < units.length - 1);
+  return `${n >= 100 ? n.toFixed(0) : n.toFixed(1)} ${units[i]}`;
+}
+const serverNow = () => Date.now() + state.skew;
+const ms = iso => { const v = Date.parse(iso); return isNaN(v) || v <= 0 ? null : v; };
+const rtf = typeof Intl.RelativeTimeFormat === 'function' ? new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }) : null;
+function ago(iso) {
+  const v = ms(iso);
+  if (v == null) return '—';
+  const s = Math.floor((serverNow() - v) / 1000);
+  if (s < 60) return 'just now';
+  for (const [unit, sec] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]]) {
+    if (s >= sec) {
+      const n = Math.floor(s / sec);
+      return rtf ? rtf.format(-n, unit) : `${n} ${unit}${n === 1 ? '' : 's'} ago`;
+    }
+  }
+  return 'just now';
+}
+const absTime = iso => { const v = ms(iso); return v == null ? '' : new Date(v).toLocaleString(); };
+const timeEl = iso => `<time datetime="${esc(iso)}" title="${esc(absTime(iso))}">${esc(ago(iso))}</time>`;
+function duration(msec) {
+  const s = Math.max(0, Math.floor(msec / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+const si = (type, text) => `<span class="si si-${type}">${ICON[type]}<span>${esc(text)}</span></span>`;
+const netHref = name => `#/networks/${encodeURIComponent(name)}`;
+
+// ---- building blocks ----
+function pageHeader({ crumbs, title, desc, actions }) {
+  const items = crumbs.map((c, i) => i < crumbs.length - 1
+    ? `<li><a class="link-plain" href="${c.href}">${esc(c.text)}</a></li>`
+    : `<li aria-current="page">${esc(c.text)}</li>`).join('');
+  return `<nav aria-label="Breadcrumbs"><ol class="breadcrumbs">${items}</ol></nav>
+<div class="page-header"><div><h1 tabindex="-1">${esc(title)}</h1>${desc ? `<p>${desc}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;
+}
+function container({ title, counter, desc, actions, body }) {
+  return `<section class="container"><div class="container-header"><div><h2>${esc(title)}${counter != null ? ` <span class="counter">(${num(counter)})</span>` : ''}</h2>${desc ? `<p>${desc}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div><div class="container-body">${body}</div></section>`;
+}
+const kv = cols => `<div class="kv-wrap"><div class="kv">${cols.map(col => `<dl class="kv-col">${col.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`).join('')}</div></div>`;
+function alertBox(type, title, html, dismissId) {
+  const close = dismissId != null ? `<button type="button" class="icon-btn" data-action="dismiss" data-id="${dismissId}" aria-label="Dismiss">${ICON.close}</button>` : '';
+  return `<div class="alert alert-${type}"${dismissId != null ? ` data-key="flash-${dismissId}"` : ''}>${ICON[type]}<div class="alert-body">${title ? `<span class="alert-title">${esc(title)}</span>` : ''}${html}</div>${close}</div>`;
+}
+function copyButton(key, text, label) {
+  const done = state.copied[key] > Date.now();
+  return `<button type="button" class="btn" data-action="copy" data-ck="${esc(key)}" data-copy="${esc(text)}" aria-label="${esc(label)}">${done ? ICON.check : ICON.copy}<span>${done ? 'Copied' : 'Copy'}</span></button>`;
+}
+const loading = () => `<div class="empty">${si('pending', 'Loading…')}</div>`;
+function totals(nets) {
+  let total = 0, online = 0;
+  for (const n of nets) for (const d of n.devices || []) { total++; if (d.online) online++; }
+  return { total, online };
+}
+
+// ---- views ----
+function viewDashboard(s) {
+  const status = state.error ? si('error', 'Unreachable') : s ? si('success', 'Running') : si('pending', 'Loading…');
+  const dash = '—';
+  let cols;
+  if (s) {
+    const t = totals(s.networks);
+    cols = [
+      [['Status', status], ['Uptime', esc(duration(serverNow() - ms(s.started)))], ['Version', esc(s.version)]],
+      [['Networks', `<a class="link-plain" href="#/networks">${num(s.networks.length)}</a>`], ['Devices online / total', `${num(t.online)} / ${num(t.total)}`]],
+      [['Relayed traffic', `${plural(s.relayPackets, 'packet', 'packets')} (${esc(bytes(s.relayBytes))})<span class="sub">Forwarded for peers that couldn't connect directly</span>`], ['Started', `<time datetime="${esc(s.started)}">${esc(absTime(s.started))}</time>`]],
+    ];
+  } else {
+    cols = [[['Status', status], ['Uptime', dash], ['Version', dash]], [['Networks', dash], ['Devices online / total', dash]], [['Relayed traffic', dash], ['Started', dash]]];
+  }
+
+  const port = s ? s.controlPort : 29814;
+  const addr = `${location.hostname}:${port}`;
+  const local = /^(localhost|127\.|\[::1\]$)/.test(location.hostname);
+  const dashPort = location.port || (location.protocol === 'https:' ? '443' : '80');
+  const cmd = `.\\build.ps1 -Server ${addr} -Network "<network-name>" -Password "<password>"`;
+  const connect = `
+<div class="field-label" id="addr-label">Coordinator address</div>
+<div class="copy-row"><code class="addr" aria-labelledby="addr-label">${esc(addr)}</code>${copyButton('addr', addr, 'Copy coordinator address')}</div>
+<p class="field-desc">Clients connect here over TCP and UDP port ${esc(port)}. Taken from the address you opened this page with.</p>
+${local ? alertBox('warning', 'You opened this page through localhost', `<p>Friends can't use <code>${esc(addr)}</code>. Replace it with the server's public IP or DNS name.</p>`) : ''}
+<h3>Add friends in 3 steps</h3>
+<ol class="steps">
+  <li><b>Build the Windows installer</b> on your PC, from the zainVPN folder:
+    <div class="cmd-row"><pre class="cmd"><code>${esc(cmd)}</code></pre>${copyButton('cmd', cmd, 'Copy build command')}</div>
+    <p>Choose any network name and a shared password. The network is created when the first device joins.</p></li>
+  <li><b>Send the single <code>zainVPN-Setup.exe</code> to your friends.</b>
+    <p>The address, network and password are built in, so there's nothing to configure.</p></li>
+  <li><b>They install it and pick a nickname.</b>
+    <p>zainVPN then runs in the background and starts with Windows. Their PC appears under <a href="#/networks">Networks</a>.</p></li>
+</ol>
+${alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> from anywhere (0.0.0.0/0) for clients. Allow <b>TCP ${esc(dashPort)}</b> (this dashboard) only from your own IP.</p>`)}`;
+
+  return pageHeader({ crumbs: [{ text: 'zainVPN', href: '#/' }, { text: 'Dashboard' }], title: 'Dashboard', desc: 'Health of this coordinator and how to connect devices to it.' })
+    + container({ title: 'Service overview', body: kv(cols) })
+    + container({ title: 'Connect a device', desc: 'Everything your friends need to join a virtual LAN.', body: connect });
+}
+
+function viewNetworks(s) {
+  let body;
+  if (!s) body = loading();
+  else if (!s.networks.length) body = `<div class="empty"><b>No networks yet</b>A network is created when the first device joins.<br><a class="btn" href="#/">How to connect a device</a></div>`;
+  else {
+    const rows = s.networks.map(n => {
+      const devs = n.devices || [];
+      const online = devs.filter(d => d.online).length;
+      return `<tr data-key="net:${esc(n.name)}">
+<td class="cell-mid"><a class="link-plain strong" href="${netHref(n.name)}">${esc(n.name)}</a></td>
+<td class="cell-mid">${si(online ? 'success' : 'stopped', `${num(online)} of ${num(devs.length)} online`)}</td>
+<td class="cell-mid">${timeEl(n.created)}</td>
+<td class="cell-mid"><div class="actions"><a class="btn" href="${netHref(n.name)}" aria-label="View network ${esc(n.name)}">View</a><button type="button" class="btn" data-action="delete-network" data-name="${esc(n.name)}" aria-label="Delete network ${esc(n.name)}">Delete</button></div></td>
+</tr>`;
+    }).join('');
+    body = `<div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Devices</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  return pageHeader({ crumbs: [{ text: 'zainVPN', href: '#/' }, { text: 'Networks' }], title: 'Networks', desc: 'Each network is a private virtual LAN (10.77.0.0/24) for one group of friends.' })
+    + container({ title: 'Networks', counter: s ? s.networks.length : null, desc: 'Created automatically when the first device joins with a new name and password.', body });
+}
+
+function viewNetwork(s, name) {
+  const crumbs = [{ text: 'zainVPN', href: '#/' }, { text: 'Networks', href: '#/networks' }, { text: name }];
+  if (!s) return pageHeader({ crumbs, title: name }) + container({ title: 'Devices', body: loading() });
+  const n = s.networks.find(x => x.name === name);
+  if (!n) {
+    return pageHeader({ crumbs, title: name })
+      + alertBox('error', 'Network not found', `<p>There's no network called “${esc(name)}”. It may have been deleted. <a href="#/networks">Back to networks</a></p>`);
+  }
+  const devs = n.devices || [];
+  const online = devs.filter(d => d.online).length;
+  const relayed = devs.reduce((a, d) => a + (d.relayBytes || 0), 0);
+  const details = kv([
+    [['Devices online / total', `${si(online ? 'success' : 'stopped', `${num(online)} / ${num(devs.length)}`)}`]],
+    [['Created', `${timeEl(n.created)}<span class="sub">${esc(absTime(n.created))}</span>`]],
+    [['Subnet', '<span class="mono">10.77.0.0/24</span>'], ['Relayed now', `${esc(bytes(relayed))}<span class="sub">By devices that are online</span>`]],
+  ]);
+
+  let body;
+  if (!devs.length) body = `<div class="empty"><b>No devices</b>Devices appear here when they join this network.</div>`;
+  else {
+    const rows = devs.map(d => {
+      const pub = d.public ? `<span class="mono">${esc(d.public)}</span>`
+        : d.online ? `<span class="si si-pending" title="The device hasn't reached the coordinator over UDP yet. Check that UDP ${esc(s.controlPort)} is open.">${ICON.pending}<span>No UDP yet</span></span>` : '—';
+      const lan = d.online && d.local && d.local.length ? d.local.map(e => `<span class="mono">${esc(e)}</span>`).join('<br>') : '—';
+      const seen = d.online ? `Connected ${timeEl(d.connected)}` : `Last seen ${timeEl(d.lastSeen)}`;
+      return `<tr data-key="dev:${esc(d.id)}">
+<td><span class="strong">${esc(d.name)}</span><span class="sub mono" title="Device ID">${esc(d.id.length > 12 ? d.id.slice(0, 12) + '…' : d.id)}</span></td>
+<td class="mono">${esc(d.ip)}</td>
+<td>${d.online ? si('success', 'Online') : si('stopped', 'Offline')}</td>
+<td>${pub}</td>
+<td>${lan}</td>
+<td>${seen}</td>
+<td>${d.online ? esc(bytes(d.relayBytes)) : '—'}</td>
+<td><button type="button" class="btn" data-action="remove-device" data-network="${esc(n.name)}" data-id="${esc(d.id)}" data-name="${esc(d.name)}" data-ip="${esc(d.ip)}" aria-label="Remove ${esc(d.name)}">Remove</button></td>
+</tr>`;
+    }).join('');
+    body = `<div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Virtual IP</th><th scope="col">Status</th><th scope="col">Public endpoint</th><th scope="col">LAN endpoints</th><th scope="col">Connected / last seen</th><th scope="col">Relayed</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  return pageHeader({ crumbs, title: n.name, actions: `<button type="button" class="btn" data-action="delete-network" data-name="${esc(n.name)}">Delete network</button>` })
+    + container({ title: 'Network details', body: details })
+    + container({ title: 'Devices', counter: devs.length, desc: 'Each device keeps its virtual IP between sessions. Relayed traffic is counted for the current connection.', body });
+}
+
+// ---- rendering without flicker: patch the DOM in place ----
+function morphChildren(from, to) {
+  const a = [...from.childNodes], b = [...to.childNodes];
+  b.forEach((nu, i) => {
+    const old = a[i];
+    if (!old) return from.appendChild(nu);
+    if (old.nodeType !== nu.nodeType || old.nodeName !== nu.nodeName
+      || (old.nodeType === 1 && old.getAttribute('data-key') !== nu.getAttribute('data-key'))) {
+      return from.replaceChild(nu, old);
+    }
+    if (old.nodeType !== 1) {
+      if (old.nodeValue !== nu.nodeValue) old.nodeValue = nu.nodeValue;
+      return;
+    }
+    for (const at of [...old.attributes]) if (!nu.hasAttribute(at.name)) old.removeAttribute(at.name);
+    for (const at of [...nu.attributes]) if (old.getAttribute(at.name) !== at.value) old.setAttribute(at.name, at.value);
+    morphChildren(old, nu);
+  });
+  for (let i = a.length - 1; i >= b.length; i--) from.removeChild(a[i]);
+}
+function patch(el, html) {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  morphChildren(el, t.content);
+}
+
+function route() {
+  const [a, b] = location.hash.replace(/^#\/?/, '').split('/');
+  if (a === 'networks' && b) { try { return { view: 'network', name: decodeURIComponent(b) }; } catch { /* fall through */ } }
+  return { view: a === 'networks' ? 'networks' : 'dashboard' };
+}
+
+function render(full) {
+  const r = route(), s = state.snap;
+  const html = r.view === 'network' ? viewNetwork(s, r.name) : r.view === 'networks' ? viewNetworks(s) : viewDashboard(s);
+  if (full) view.innerHTML = html; else patch(view, html);
+  renderFlash();
+  for (const a of document.querySelectorAll('[data-nav]')) {
+    if (a.dataset.nav === (r.view === 'network' ? 'networks' : r.view)) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  }
+  const title = r.view === 'network' ? r.name : r.view === 'networks' ? 'Networks' : 'Dashboard';
+  document.title = `${title} | zainVPN Coordinator`;
+  if (s) {
+    $('#top-version').textContent = s.version;
+    $('#nav-foot').textContent = `Version ${s.version}. Updates automatically every few seconds.`;
+  }
+}
+
+function renderFlash() {
+  let html = '';
+  if (state.error) {
+    html += alertBox('error', state.snap ? 'Lost connection to the coordinator' : "Couldn't load coordinator data",
+      `<p>${esc(state.error)}. Retrying automatically…</p>`);
+  }
+  for (const f of state.flashes) html += alertBox(f.type, '', `<p>${esc(f.text)}</p>`, f.id);
+  patch($('#flash'), html);
+}
+
+let flashSeq = 0;
+function flash(type, text) {
+  const id = ++flashSeq;
+  state.flashes.push({ id, type, text });
+  if (type === 'success') setTimeout(() => dismiss(id), 8000);
+  renderFlash();
+}
+function dismiss(id) {
+  state.flashes = state.flashes.filter(f => f.id !== id);
+  renderFlash();
+}
+function announce(msg) {
+  const sr = $('#sr');
+  sr.textContent = '';
+  setTimeout(() => { sr.textContent = msg; }, 50);
+}
+
+// ---- API and polling ----
+async function api(method, path) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 8000);
+  let r;
+  try {
+    r = await fetch(path, { method, cache: 'no-store', credentials: 'same-origin', signal: ctl.signal, headers: { 'X-Requested-With': 'zainvpn', Accept: 'application/json' } });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'The request timed out' : "Can't reach the server");
+  } finally {
+    clearTimeout(timer);
+  }
+  if (r.status === 401) {
+    location.href = '/login';
+    throw Object.assign(new Error('Signed out'), { auth: true });
+  }
+  let body = null;
+  try { body = await r.json(); } catch { /* not JSON */ }
+  if (!r.ok) throw Object.assign(new Error((body && body.error) || `HTTP ${r.status}`), { status: r.status });
+  return body;
+}
+
+let inflight = null, pollTimer = 0;
+function poll() {
+  if (inflight) return inflight;
+  clearTimeout(pollTimer);
+  inflight = (async () => {
+    try {
+      const s = await api('GET', '/api/snapshot');
+      s.networks = s.networks || [];
+      state.snap = s;
+      state.skew = (ms(s.now) || Date.now()) - Date.now();
+      state.error = null;
+    } catch (e) {
+      if (e.auth) return;
+      state.error = e.message;
+    }
+    render(false);
+    pollTimer = setTimeout(poll, document.hidden ? 15000 : POLL_MS);
+  })().finally(() => { inflight = null; });
+  return inflight;
+}
+// refresh fetches a snapshot taken after whatever just happened.
+async function refresh() {
+  if (inflight) await inflight;
+  return poll();
+}
+
+// ---- actions ----
+const modal = $('#modal'), okBtn = $('#modal-ok'), cancelBtn = $('#modal-cancel');
+let modalRun = null, modalBusy = false, modalReturn = null;
+function confirmModal({ title, body, ok, run }) {
+  modalReturn = document.activeElement;
+  $('#modal-title').textContent = title;
+  $('#modal-body').innerHTML = body;
+  $('#modal-error').innerHTML = '';
+  okBtn.textContent = ok;
+  okBtn.dataset.label = ok;
+  modalRun = run;
+  setBusy(false);
+  modal.showModal();
+  cancelBtn.focus();
+}
+function setBusy(busy) {
+  modalBusy = busy;
+  okBtn.disabled = cancelBtn.disabled = busy;
+  okBtn.innerHTML = busy ? `${ICON.pending}<span>Working…</span>` : esc(okBtn.dataset.label);
+}
+okBtn.addEventListener('click', async () => {
+  if (!modalRun || modalBusy) return;
+  setBusy(true);
+  try {
+    await modalRun();
+    modal.close();
+  } catch (e) {
+    if (e.auth) return;
+    setBusy(false);
+    $('#modal-error').innerHTML = alertBox('error', 'Action failed', `<p>${esc(e.message)}</p>`);
+  }
+});
+modal.addEventListener('cancel', e => { if (modalBusy) e.preventDefault(); });
+modal.addEventListener('click', e => { if (e.target === modal && !modalBusy) modal.close(); });
+modal.addEventListener('close', () => {
+  modalRun = null;
+  const back = modalReturn && document.contains(modalReturn) ? modalReturn : $('#view h1');
+  if (back) back.focus();
+});
+
+function askDeleteNetwork(name) {
+  const n = state.snap && state.snap.networks.find(x => x.name === name);
+  const count = n ? (n.devices || []).length : 0;
+  confirmModal({
+    title: 'Delete network',
+    ok: 'Delete',
+    body: `<p>Delete <b>${esc(name)}</b>? Its ${esc(plural(count, 'device', 'devices'))} will be disconnected and the network, its password and all IP assignments are forgotten.</p>`
+      + alertBox('info', '', `<p>Devices that still have zainVPN running reconnect within seconds and re-create the network with the password built into their installer. To keep people out, build a new installer with a different network name or password.</p>`),
+    run: async () => {
+      await api('DELETE', `/api/networks/${encodeURIComponent(name)}`);
+      flash('success', `Network “${name}” deleted.`);
+      announce(`Network ${name} deleted`);
+      if (route().view === 'network') location.hash = '#/networks';
+      await refresh();
+    },
+  });
+}
+
+function askRemoveDevice({ network, id, name, ip }) {
+  confirmModal({
+    title: 'Remove device',
+    ok: 'Remove',
+    body: `<p>Remove <b>${esc(name)}</b> (<span class="mono">${esc(ip)}</span>) from <b>${esc(network)}</b>? It is disconnected right away and its virtual IP is released.</p>`
+      + alertBox('info', '', `<p>If zainVPN is still running on that PC it rejoins automatically and is assigned an IP again, possibly a different one. Use this to clean up old devices or fix a stuck connection.</p>`),
+    run: async () => {
+      await api('DELETE', `/api/networks/${encodeURIComponent(network)}/devices/${encodeURIComponent(id)}`);
+      flash('success', `${name} removed from “${network}”.`);
+      announce(`${name} removed`);
+      await refresh();
+    },
+  });
+}
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* fall back below */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.className = 'sr-only';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { /* unsupported */ }
+  ta.remove();
+  return ok;
+}
+async function onCopy(btn) {
+  const key = btn.dataset.ck;
+  if (await copyText(btn.dataset.copy)) {
+    state.copied[key] = Date.now() + 2000;
+    announce('Copied to clipboard');
+    render(false);
+    btn.focus();
+    setTimeout(() => render(false), 2100);
+  } else {
+    flash('error', "Couldn't copy automatically. Select the text and copy it yourself.");
+  }
+}
+
+async function signOut() {
+  try { await fetch('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'zainvpn' } }); } catch { /* go anyway */ }
+  location.href = '/login';
+}
+
+// ---- navigation (drawer on small screens) ----
+const navToggle = $('#nav-toggle'), backdrop = $('#nav-backdrop');
+const isOpen = () => document.body.classList.contains('nav-open');
+function setNav(open) {
+  if (open === isOpen()) return;
+  document.body.classList.toggle('nav-open', open);
+  navToggle.setAttribute('aria-expanded', String(open));
+  backdrop.hidden = !open;
+  if (open) $('#sidenav a').focus(); else navToggle.focus();
+}
+navToggle.addEventListener('click', () => setNav(!isOpen()));
+matchMedia('(min-width: 689px)').addEventListener('change', e => { if (e.matches && isOpen()) setNav(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen()) setNav(false); });
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const d = el.dataset;
+  switch (d.action) {
+    case 'copy': onCopy(el); break;
+    case 'delete-network': askDeleteNetwork(d.name); break;
+    case 'remove-device': askRemoveDevice(d); break;
+    case 'dismiss': dismiss(Number(d.id)); break;
+    case 'signout': signOut(); break;
+    case 'nav-close': setNav(false); break;
+    case 'modal-cancel': if (!modalBusy) modal.close(); break;
+  }
+});
+window.addEventListener('hashchange', () => {
+  if (isOpen()) { document.body.classList.remove('nav-open'); navToggle.setAttribute('aria-expanded', 'false'); backdrop.hidden = true; }
+  render(true);
+  window.scrollTo(0, 0);
+  const h = $('#view h1');
+  if (h) h.focus({ preventScroll: true });
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+
+render(true);
+poll();
+})();
+</script>
+</body>
+</html>

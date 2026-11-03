@@ -1,0 +1,13 @@
+.git
+.gitignore
+.dockerignore
+Dockerfile
+build/
+dist/
+third_party/
+installer/
+*.exe
+.env
+.env.*
+zainvpn-state.json
+*.tmp

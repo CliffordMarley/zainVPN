@@ -13,7 +13,22 @@ import (
 	"time"
 
 	"zainvpn/internal/client"
+	"zainvpn/internal/proto"
 )
+
+// stateSetup is the Status state while this PC isn't in a network (no
+// invite code yet). The engine never reports it.
+const (
+	stateSetup   = "setup"
+	setupMessage = "Create or join a network to get started"
+)
+
+// adapter is the virtual adapter: the engine's Host, plus removing the
+// address while no network is joined.
+type adapter interface {
+	client.Host
+	ClearAddress() error
+}
 
 // vpn owns the engine: it runs one client.Engine at a time on the adapter and
 // replaces it when the settings change. It is the UI's backend.
@@ -22,14 +37,15 @@ type vpn struct {
 	ring *logRing
 	path string // config.json
 
-	applyMu sync.Mutex // serializes Apply
+	updateMu sync.Mutex // serializes Update
 
 	mu     sync.Mutex
 	cfg    client.Config
-	host   client.Host // nil until the adapter is ready
+	host   adapter // nil until the adapter is ready
 	run    *engineRun
 	phase  string // status message while there's no adapter yet
 	engErr string // last engine failure, while waiting to restart it
+	note   string // setup message after a bad saved invite, until the next change
 	closed bool
 
 	eng atomic.Pointer[client.Engine] // current engine, for the packet path
@@ -48,11 +64,17 @@ func runVPN(ctx context.Context, logger *log.Logger, ring *logRing, dir string) 
 	cfg, err := loadConfig(v.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		logger.Printf("no settings yet (%s); waiting for them in the dashboard", v.path)
+		logger.Printf("no settings yet (%s); waiting for them in the zainVPN app", v.path)
 	case err != nil:
 		logger.Printf("load settings: %v", err)
 	default:
-		if ensureIdentity(&cfg) {
+		old := cfg
+		ensureIdentity(&cfg)
+		if err := cleanInvite(&cfg); err != nil {
+			logger.Printf("ignoring the saved invite code: %v", err) // never log the code: it's the secret
+			v.note = "The saved invite code isn't valid. Create or join a network to get started"
+		}
+		if cfg != old {
 			if err := saveConfig(v.path, cfg); err != nil {
 				logger.Print(err)
 			}
@@ -103,20 +125,35 @@ func runVPN(ctx context.Context, logger *log.Logger, ring *logRing, dir string) 
 	return fatal
 }
 
-func (v *vpn) setHost(h client.Host) {
+func (v *vpn) setHost(h adapter) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.host, v.phase = h, ""
+	if v.cfg.Invite == "" {
+		v.clearAddressLocked() // Windows may have kept the last network's address
+	}
 	if v.run == nil {
 		v.startLocked()
 	}
 }
 
-// startLocked starts an engine for v.cfg if the adapter is ready and the
-// settings are complete. The engine is restarted if it ever fails.
+// clearAddressLocked removes the adapter's virtual address (best effort).
+// It runs under mu, so no engine can be assigning one at the same time.
+func (v *vpn) clearAddressLocked() {
+	if v.host == nil {
+		return
+	}
+	if err := v.host.ClearAddress(); err != nil {
+		v.log.Printf("clear adapter address: %v", err)
+	}
+}
+
+// startLocked starts an engine for v.cfg if the adapter is ready, a network
+// is joined and the settings are complete. The engine is restarted if it
+// ever fails.
 func (v *vpn) startLocked() {
 	cfg, host := v.cfg, v.host
-	if v.closed || host == nil || validateConfig(cfg) != nil {
+	if v.closed || host == nil || cfg.Invite == "" || validateConfig(cfg) != nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,11 +193,13 @@ func (v *vpn) setEngErr(msg string) {
 // replace swaps in new settings (if c is non-nil) or shuts down for good,
 // stopping the running engine and waiting for it. The settings change under
 // the same lock that detaches the old engine, so a concurrent setHost can
-// only ever start an engine with the new settings.
+// only ever start an engine with the new settings. Leaving a network also
+// removes the adapter's address.
 func (v *vpn) replace(c *client.Config) {
 	v.mu.Lock()
+	leaving := c != nil && c.Invite == "" && v.cfg.Invite != ""
 	if c != nil {
-		v.cfg, v.engErr = *c, ""
+		v.cfg, v.engErr, v.note = *c, "", ""
 	} else {
 		v.closed = true
 	}
@@ -173,6 +212,9 @@ func (v *vpn) replace(c *client.Config) {
 	}
 	if c != nil {
 		v.mu.Lock()
+		if leaving {
+			v.clearAddressLocked()
+		}
 		if v.run == nil {
 			v.startLocked()
 		}
@@ -184,19 +226,34 @@ func (v *vpn) stop() { v.replace(nil) }
 
 func (v *vpn) Status() client.Status {
 	v.mu.Lock()
-	cfg, host, phase, engErr := v.cfg, v.host, v.phase, v.engErr
+	cfg, host, phase, engErr, note := v.cfg, v.host, v.phase, v.engErr, v.note
 	v.mu.Unlock()
-	if e := v.eng.Load(); e != nil && engErr == "" {
-		return e.Status()
-	}
 	st := client.Status{
 		State: client.StateStarting, Message: phase,
-		Name: cfg.Name, Network: cfg.Network, Server: cfg.Server, Peers: []client.PeerStatus{},
+		Name: cfg.Name, Server: cfg.Server, Peers: []client.PeerStatus{},
 	}
-	if engErr != "" {
+	switch e := v.eng.Load(); {
+	case cfg.Invite == "":
+		st.State, st.Message = stateSetup, setupMessage
+		if note != "" {
+			st.Message = note
+		} else if checkServer(cfg.Server) != nil {
+			st.Message = "Enter your coordinator address in Settings, then create or join a network"
+		}
+		return st
+	case e != nil && engErr == "":
+		st = e.Status()
+	case engErr != "":
 		st.State, st.Message = client.StateError, engErr
-	} else if err := validateConfig(cfg); host != nil && err != nil {
-		st.State, st.Message = client.StateError, "Finish setting up zainVPN in Settings: "+err.Error()
+	case host != nil:
+		if err := validateConfig(cfg); err != nil {
+			st.State, st.Message = client.StateError, "Finish setting up zainVPN in Settings: "+err.Error()
+		}
+	}
+	if st.Invite == "" { // the engine hasn't parsed it yet
+		if inv, err := proto.ParseInvite(cfg.Invite); err == nil {
+			st.Network, st.Invite = inv.Label, inv.String()
+		}
 	}
 	return st
 }
@@ -207,14 +264,28 @@ func (v *vpn) Config() client.Config {
 	return v.cfg
 }
 
-// Apply saves new settings and reconnects with them on the same adapter.
-func (v *vpn) Apply(c client.Config) error {
-	v.applyMu.Lock()
-	defer v.applyMu.Unlock()
+// Update changes the settings with fn, saves them and reconnects with them
+// on the same adapter. If fn fails, nothing changes and its error is
+// returned as is.
+func (v *vpn) Update(fn func(*client.Config) error) error {
+	v.updateMu.Lock()
+	defer v.updateMu.Unlock()
+	old := v.Config()
+	c := old
+	if err := fn(&c); err != nil {
+		return err
+	}
 	if err := saveConfig(v.path, c); err != nil {
 		return err
 	}
-	v.log.Printf("settings changed: network %q, coordinator %s, nickname %q", c.Network, c.Server, c.Name)
+	if c == old {
+		return nil
+	}
+	network := "no network"
+	if l := networkLabel(c.Invite); l != "" {
+		network = fmt.Sprintf("network %q", l) // never the code: logs get shared
+	}
+	v.log.Printf("settings changed: %s, coordinator %s, nickname %q", network, c.Server, c.Name)
 	v.replace(&c)
 	return nil
 }

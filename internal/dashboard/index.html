@@ -390,6 +390,7 @@ function duration(msec) {
 }
 const si = (type, text) => `<span class="si si-${type}">${ICON[type]}<span>${esc(text)}</span></span>`;
 const netHref = name => `#/networks/${encodeURIComponent(name)}`;
+const netLabel = n => n.label || n.name;
 
 // ---- building blocks ----
 function pageHeader({ crumbs, title, desc, actions }) {
@@ -438,7 +439,7 @@ function viewDashboard(s) {
   const addr = `${location.hostname}:${port}`;
   const local = /^(localhost|127\.|\[::1\]$)/.test(location.hostname);
   const dashPort = location.port || (location.protocol === 'https:' ? '443' : '80');
-  const cmd = `.\\build.ps1 -Server ${addr} -Network "<network-name>" -Password "<password>" -Publish`;
+  const cmd = `.\\build.ps1 -Server ${addr} -Publish`;
   const link = `${location.origin}/`;
   const connect = `
 <div class="field-label" id="addr-label">Coordinator address</div>
@@ -449,15 +450,17 @@ ${local ? alertBox('warning', 'You opened this page through localhost', `<p>Frie
 <ol class="steps">
   <li><b>Build the Windows installer and publish it here</b>, from the zainVPN folder on your PC:
     <div class="cmd-row"><pre class="cmd"><code>${esc(cmd)}</code></pre>${copyButton('cmd', cmd, 'Copy build command')}</div>
-    <p>Choose any network name and a shared password. <code>-Publish</code> uploads the installer to this dashboard and asks for the admin password. You can also upload <code>dist\\zainVPN-Setup.exe</code> under Installer above.</p></li>
+    <p>Usually not needed: <code>bash deploy.sh</code> builds the installer on the server with this address built in. Use this only to publish a build from your PC (it asks for the admin password), or upload <code>dist\\zainVPN-Setup.exe</code> under Installer above.</p></li>
   <li><b>Send your friends this link:</b>
     <div class="copy-row"><code class="addr">${esc(link)}</code>${copyButton('link', link, 'Copy download link')}</div>
-    <p>They download zainVPN from the sign-in page${s && s.downloadCode ? ' with the download code (<code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code>)' : ''}. The address, network and password are built into the installer.</p></li>
+    <p>They download zainVPN from the sign-in page${s && s.downloadCode ? ' with the download code (<code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code>)' : ''}. The installer only contains this server's address.</p></li>
+  <li><b>Create a network in your zainVPN app and share the invite code.</b>
+    <p>Open zainVPN, click <b>Create network</b>, and send friends the code (like <code>blur-7K3M-9X2Q-8W4T</code>). They paste it under <b>Join network</b>. The code is what keeps a network private, so share it only with your group.</p></li>
   <li><b>They install it and pick a nickname.</b>
     <p>zainVPN then runs in the background and starts with Windows. Their PC appears under <a href="#/networks">Networks</a>.</p></li>
 </ol>
 ${alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> and <b>TCP ${esc(dashPort)}</b> (this page, for downloads) from anywhere. Admin pages still need the password.</p>`)}
-${s && !s.downloadCode ? alertBox('warning', 'Anyone who opens this page can download the installer', `<p>The installer contains the network password. To require a code, set <code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code> and run <code>bash deploy.sh</code>.</p>`) : ''}`;
+`;
 
   return pageHeader({ crumbs: [{ text: 'zainVPN', href: '#/' }, { text: 'Dashboard' }], title: 'Dashboard', desc: 'Health of this coordinator and how to connect devices to it.' })
     + container({ title: 'Service overview', body: kv(cols) })
@@ -493,25 +496,27 @@ function viewNetworks(s) {
       const devs = n.devices || [];
       const online = devs.filter(d => d.online).length;
       return `<tr data-key="net:${esc(n.name)}">
-<td class="cell-mid"><a class="link-plain strong" href="${netHref(n.name)}">${esc(n.name)}</a></td>
+<td class="cell-mid"><a class="link-plain strong" href="${netHref(n.name)}">${esc(netLabel(n))}</a>${n.label ? ` <span class="sub mono" title="${esc(n.name)}">${esc(n.name.slice(0, 8))}</span>` : ''}</td>
 <td class="cell-mid">${si(online ? 'success' : 'stopped', `${num(online)} of ${num(devs.length)} online`)}</td>
 <td class="cell-mid">${timeEl(n.created)}</td>
-<td class="cell-mid"><div class="actions"><a class="btn" href="${netHref(n.name)}" aria-label="View network ${esc(n.name)}">View</a><button type="button" class="btn" data-action="delete-network" data-name="${esc(n.name)}" aria-label="Delete network ${esc(n.name)}">Delete</button></div></td>
+<td class="cell-mid"><div class="actions"><a class="btn" href="${netHref(n.name)}" aria-label="View network ${esc(netLabel(n))}">View</a><button type="button" class="btn" data-action="delete-network" data-name="${esc(n.name)}" aria-label="Delete network ${esc(netLabel(n))}">Delete</button></div></td>
 </tr>`;
     }).join('');
     body = `<div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Devices</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   return pageHeader({ crumbs: [{ text: 'zainVPN', href: '#/' }, { text: 'Networks' }], title: 'Networks', desc: 'Each network is a private virtual LAN (10.77.0.0/24) for one group of friends.' })
-    + container({ title: 'Networks', counter: s ? s.networks.length : null, desc: 'Created automatically when the first device joins with a new name and password.', body });
+    + container({ title: 'Networks', counter: s ? s.networks.length : null, desc: 'Created automatically when the first device joins with a new invite code.', body });
 }
 
 function viewNetwork(s, name) {
-  const crumbs = [{ text: 'zainVPN', href: '#/' }, { text: 'Networks', href: '#/networks' }, { text: name }];
-  if (!s) return pageHeader({ crumbs, title: name }) + container({ title: 'Devices', body: loading() });
-  const n = s.networks.find(x => x.name === name);
+  const n0 = s && s.networks.find(x => x.name === name);
+  const label = n0 ? netLabel(n0) : name;
+  const crumbs = [{ text: 'zainVPN', href: '#/' }, { text: 'Networks', href: '#/networks' }, { text: label }];
+  if (!s) return pageHeader({ crumbs, title: label }) + container({ title: 'Devices', body: loading() });
+  const n = n0;
   if (!n) {
-    return pageHeader({ crumbs, title: name })
-      + alertBox('error', 'Network not found', `<p>There's no network called “${esc(name)}”. It may have been deleted. <a href="#/networks">Back to networks</a></p>`);
+    return pageHeader({ crumbs, title: label })
+      + alertBox('error', 'Network not found', `<p>That network doesn't exist any more. It may have been deleted. <a href="#/networks">Back to networks</a></p>`);
   }
   const devs = n.devices || [];
   const online = devs.filter(d => d.online).length;
@@ -543,7 +548,7 @@ function viewNetwork(s, name) {
     }).join('');
     body = `<div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Virtual IP</th><th scope="col">Status</th><th scope="col">Public endpoint</th><th scope="col">LAN endpoints</th><th scope="col">Connected / last seen</th><th scope="col">Relayed</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
-  return pageHeader({ crumbs, title: n.name, actions: `<button type="button" class="btn" data-action="delete-network" data-name="${esc(n.name)}">Delete network</button>` })
+  return pageHeader({ crumbs, title: label, actions: `<button type="button" class="btn" data-action="delete-network" data-name="${esc(n.name)}">Delete network</button>` })
     + container({ title: 'Network details', body: details })
     + container({ title: 'Devices', counter: devs.length, desc: 'Each device keeps its virtual IP between sessions. Relayed traffic is counted for the current connection.', body });
 }
@@ -718,8 +723,8 @@ function askDeleteNetwork(name) {
   confirmModal({
     title: 'Delete network',
     ok: 'Delete',
-    body: `<p>Delete <b>${esc(name)}</b>? Its ${esc(plural(count, 'device', 'devices'))} will be disconnected and the network, its password and all IP assignments are forgotten.</p>`
-      + alertBox('info', '', `<p>Devices that still have zainVPN running reconnect within seconds and re-create the network with the password built into their installer. To keep people out, build a new installer with a different network name or password.</p>`),
+    body: `<p>Delete <b>${esc(n ? netLabel(n) : name)}</b>? Its ${esc(plural(count, 'device', 'devices'))} will be disconnected and the network and all IP assignments are forgotten.</p>`
+      + alertBox('info', '', `<p>Anyone with the invite code who reconnects recreates it automatically. To lock people out, create a new network (new code) and share it only with the people you want.</p>`),
     run: async () => {
       await api('DELETE', `/api/networks/${encodeURIComponent(name)}`);
       flash('success', `Network “${name}” deleted.`);
@@ -734,7 +739,7 @@ function askRemoveDevice({ network, id, name, ip }) {
   confirmModal({
     title: 'Remove device',
     ok: 'Remove',
-    body: `<p>Remove <b>${esc(name)}</b> (<span class="mono">${esc(ip)}</span>) from <b>${esc(network)}</b>? It is disconnected right away and its virtual IP is released.</p>`
+    body: `<p>Remove <b>${esc(name)}</b> (<span class="mono">${esc(ip)}</span>) from <b>${esc((n => n ? netLabel(n) : network)(state.snap && state.snap.networks.find(x => x.name === network)))}</b>? It is disconnected right away and its virtual IP is released.</p>`
       + alertBox('info', '', `<p>If zainVPN is still running on that PC it rejoins automatically and is assigned an IP again, possibly a different one. Use this to clean up old devices or fix a stuck connection.</p>`),
     run: async () => {
       await api('DELETE', `/api/networks/${encodeURIComponent(network)}/devices/${encodeURIComponent(id)}`);

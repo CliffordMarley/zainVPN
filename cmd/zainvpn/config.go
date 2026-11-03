@@ -27,7 +27,6 @@ const (
 	adapterName = "zainVPN"
 	uiAddr      = "127.0.0.1:7779"
 	maxNameLen  = 32 // the coordinator truncates longer nicknames
-	maxNetLen   = 64
 )
 
 // dataDir is %ProgramData%\zainVPN.
@@ -42,8 +41,8 @@ func dataDir() (string, error) {
 func configPath(dir string) string { return filepath.Join(dir, "config.json") }
 
 // ensureDataDir creates the data dir and restricts it to SYSTEM and
-// Administrators, since config.json holds the network password. The dir is
-// returned even when only the lock-down failed.
+// Administrators, since config.json holds the invite code (the network's
+// secret). The dir is returned even when only the lock-down failed.
 func ensureDataDir() (string, error) {
 	dir, err := dataDir()
 	if err != nil {
@@ -91,7 +90,8 @@ func lockDown(dir string) error {
 }
 
 // loadConfig reads config.json, with or without a UTF-8 BOM (editors such
-// as Notepad may add one).
+// as Notepad may add one). Fields of older versions ("network", "password")
+// are ignored, so they're dropped on the next save.
 func loadConfig(path string) (client.Config, error) {
 	var c client.Config
 	b, err := os.ReadFile(path)
@@ -103,7 +103,7 @@ func loadConfig(path string) (client.Config, error) {
 		return c, fmt.Errorf("%s: %w", path, err)
 	}
 	c.Server = strings.TrimSpace(c.Server)
-	c.Network = strings.TrimSpace(c.Network)
+	c.Invite = strings.TrimSpace(c.Invite)
 	c.Name = strings.TrimSpace(c.Name)
 	return c, nil
 }
@@ -171,21 +171,43 @@ func truncate(s string, runes int) string {
 	return s
 }
 
-// validateConfig checks what the engine needs to connect.
+// validateConfig checks the settings. An empty invite is fine: this PC just
+// isn't in a network yet.
 func validateConfig(c client.Config) error {
 	if err := checkServer(c.Server); err != nil {
 		return err
 	}
-	n := proto.NormalizeNetwork(c.Network)
-	switch {
-	case n == "":
-		return errors.New("network name is required")
-	case len(n) > maxNetLen:
-		return fmt.Errorf("network name is too long (at most %d characters)", maxNetLen)
-	case c.Password == "":
-		return errors.New("network password is required")
+	if c.Invite != "" {
+		if _, err := proto.ParseInvite(c.Invite); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// cleanInvite rewrites c.Invite in its normal form (label-XXXX-XXXX-XXXX).
+// An invalid code is removed, since it could never connect, and reported.
+func cleanInvite(c *client.Config) error {
+	if c.Invite == "" {
+		return nil
+	}
+	inv, err := proto.ParseInvite(c.Invite)
+	if err != nil {
+		c.Invite = ""
+		return err
+	}
+	c.Invite = inv.String()
+	return nil
+}
+
+// networkLabel is the name part of an invite code ("" if it isn't valid),
+// for logs and messages. Never show the rest: it's the network's secret.
+func networkLabel(invite string) string {
+	inv, err := proto.ParseInvite(invite)
+	if err != nil {
+		return ""
+	}
+	return inv.Label
 }
 
 func checkName(name string) error {

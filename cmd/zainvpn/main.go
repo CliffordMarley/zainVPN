@@ -33,7 +33,7 @@ const usage = `zainVPN - virtual LAN for playing games with friends
 Usage: zainvpn <command> [options]
 
 Commands:
-  install [--server S] [--network N] [--password P] [--name X]
+  install [--server S] [--invite CODE] [--name X]
               save settings, then install and start the background service (admin)
   stop        stop the background service (admin)
   uninstall   remove the service, firewall rule, adapter driver and settings (admin)
@@ -123,7 +123,7 @@ func cmdStatus() error {
 		return fmt.Errorf("unexpected response from the dashboard (%s)", resp.Status)
 	}
 	st := s.Status
-	state := map[string]string{client.StateOnline: "Connected", client.StateError: "Error"}[st.State]
+	state := map[string]string{client.StateOnline: "Connected", client.StateError: "Error", stateSetup: "Not in a network"}[st.State]
 	if state == "" {
 		state = "Connecting"
 	}
@@ -149,7 +149,13 @@ func cmdStatus() error {
 	fmt.Fprintf(w, "zainVPN %s\n", s.Version)
 	fmt.Fprintf(w, "Status:\t%s\n", state)
 	fmt.Fprintf(w, "This PC:\t%s (%s)\n", st.Name, ip)
+	if st.Network == "" {
+		st.Network = "none"
+	}
 	fmt.Fprintf(w, "Network:\t%s\n", st.Network)
+	if st.Invite != "" {
+		fmt.Fprintf(w, "Invite code:\t%s\n", st.Invite)
+	}
 	fmt.Fprintf(w, "Coordinator:\t%s (%s)\n", st.Server, relay)
 	fmt.Fprintf(w, "Players:\t%d of %d online\n", online, len(st.Peers))
 	w.Flush()

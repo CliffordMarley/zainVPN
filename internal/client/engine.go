@@ -41,8 +41,7 @@ const (
 // Config is what a user sets up once.
 type Config struct {
 	Server   string `json:"server"` // host or host:port of the coordinator
-	Network  string `json:"network"`
-	Password string `json:"password"`
+	Invite   string `json:"invite"` // invite code of the network to be in; "" for none
 	Name     string `json:"name"`
 	DeviceID string `json:"deviceId"`
 }
@@ -62,6 +61,7 @@ type Engine struct {
 	t0   time.Time
 
 	// Set once in Run before any packet flows.
+	inv  proto.Invite
 	keys *proto.Keys
 	udp  *net.UDPConn
 
@@ -110,10 +110,18 @@ func New(cfg Config, host Host, logger *log.Logger) *Engine {
 
 // Run connects and keeps the engine running until ctx is cancelled.
 func (e *Engine) Run(ctx context.Context) error {
-	keys, err := proto.DeriveKeys(e.cfg.Network, e.cfg.Password)
+	inv, err := proto.ParseInvite(e.cfg.Invite)
+	if err != nil {
+		e.setState(StateError, err.Error())
+		return err
+	}
+	keys, err := inv.Keys()
 	if err != nil {
 		return err
 	}
+	e.mu.Lock()
+	e.inv = inv
+	e.mu.Unlock()
 	udp, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(e.bind))
 	if err != nil {
 		return fmt.Errorf("open UDP socket: %w", err)
@@ -415,7 +423,7 @@ func (e *Engine) runSession(ctx context.Context) error {
 		return err
 	}
 	if err := send(&proto.Msg{
-		Type: proto.MsgJoin, Version: proto.Version, Network: e.cfg.Network, Auth: e.keys.Auth,
+		Type: proto.MsgJoin, Version: proto.Version, Network: e.keys.NetworkID, Label: e.inv.Label, Auth: e.keys.Auth,
 		Device: e.cfg.DeviceID, Name: e.cfg.Name, Local: e.localEndpoints(),
 	}); err != nil {
 		return err
@@ -493,7 +501,7 @@ func (e *Engine) welcome(m *proto.Msg, srv netip.AddrPort) error {
 	e.lastReg, e.lastAck = time.Time{}, time.Time{}
 	e.state, e.message = StateOnline, ""
 	e.mu.Unlock()
-	e.log.Printf("online as %s in %q", ip, e.cfg.Network)
+	e.log.Printf("online as %s in %q", ip, e.inv.Label)
 	e.tick(time.Now()) // register right away
 	return nil
 }
@@ -581,7 +589,8 @@ type Status struct {
 	Message string       `json:"message,omitempty"`
 	IP      string       `json:"ip,omitempty"`
 	Name    string       `json:"name"`
-	Network string       `json:"network"`
+	Network string       `json:"network"` // the invite's label, e.g. "blur"
+	Invite  string       `json:"invite"`  // full invite code, to share with friends
 	Server  string       `json:"server"`
 	Relay   bool         `json:"relay"` // UDP registration with the coordinator is working
 	Peers   []PeerStatus `json:"peers"`
@@ -601,9 +610,12 @@ func (e *Engine) Status() Status {
 	defer e.mu.Unlock()
 	now := time.Now()
 	st := Status{
-		State: e.state, Message: e.message, Name: e.cfg.Name, Network: e.cfg.Network,
-		Server: e.cfg.Server, Relay: !e.lastAck.IsZero() && now.Sub(e.lastAck) < 3*registerEvery,
+		State: e.state, Message: e.message, Name: e.cfg.Name, Server: e.cfg.Server,
+		Relay: !e.lastAck.IsZero() && now.Sub(e.lastAck) < 3*registerEvery,
 		Peers: []PeerStatus{},
+	}
+	if e.inv.Secret != "" {
+		st.Network, st.Invite = e.inv.Label, e.inv.String()
 	}
 	if e.ip.IsValid() {
 		st.IP = e.ip.String()

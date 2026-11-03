@@ -52,6 +52,7 @@ type Server struct {
 
 type network struct {
 	Name     string             `json:"name"`
+	Label    string             `json:"label,omitempty"` // human name from the invite code
 	AuthHash string             `json:"authHash"`
 	Created  time.Time          `json:"created"`
 	Devices  map[string]*device `json:"devices"` // by device ID
@@ -205,8 +206,11 @@ func (s *Server) join(c net.Conn, j *proto.Msg) (*member, string) {
 			Name: key, AuthHash: hash, Created: time.Now().UTC(),
 			Devices: map[string]*device{}, online: map[netip.Addr]*member{},
 		}
+		if j.Label != "" {
+			nw.Label = proto.CleanLabel(j.Label)
+		}
 		s.networks[key] = nw
-		s.log.Printf("created network %q", key)
+		s.log.Printf("created network %q (%s)", nw.Label, key)
 	} else if subtle.ConstantTimeCompare([]byte(hash), []byte(nw.AuthHash)) != 1 {
 		return nil, errWrongPassword
 	}
@@ -440,6 +444,7 @@ type Snapshot struct {
 
 type NetworkInfo struct {
 	Name    string       `json:"name"`
+	Label   string       `json:"label,omitempty"`
 	Created time.Time    `json:"created"`
 	Online  int          `json:"online"`
 	Devices []DeviceInfo `json:"devices"`
@@ -467,7 +472,7 @@ func (s *Server) Snapshot() Snapshot {
 		Networks:     make([]NetworkInfo, 0, len(s.networks)),
 	}
 	for _, nw := range s.networks {
-		ni := NetworkInfo{Name: nw.Name, Created: nw.Created, Online: len(nw.online)}
+		ni := NetworkInfo{Name: nw.Name, Label: nw.Label, Created: nw.Created, Online: len(nw.online)}
 		for id, d := range nw.Devices {
 			di := DeviceInfo{ID: id, Name: d.Name, IP: d.IP.String(), LastSeen: d.LastSeen}
 			if m := nw.online[d.IP]; m != nil && m.id == id {

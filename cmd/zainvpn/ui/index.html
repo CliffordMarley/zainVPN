@@ -146,6 +146,10 @@ footer { text-align: center; color: var(--text-2); font-size: 12px; line-height:
 .container-body { padding: 0 20px 20px; }
 .grid-2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; margin-bottom: 20px; }
 .grid-2 > .container { margin-bottom: 0; }
+.grid-even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.invite-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.invite-code { font-family: var(--mono); font-size: 20px; line-height: 28px; font-weight: 700; letter-spacing: .5px; padding: 8px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); overflow-wrap: anywhere; user-select: all; }
+.net-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 
 /* Key-value overview */
 .kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -343,7 +347,53 @@ dialog.modal::backdrop { background: var(--overlay); }
     </div>
   </div>
 
-  <section class="container" aria-labelledby="pc-title">
+  <div id="flash" aria-live="polite"></div>
+
+  <div class="grid-2 grid-even" id="setup" hidden>
+    <section class="container" aria-labelledby="create-title">
+      <div class="container-header">
+        <div><h2 id="create-title">Create a network</h2><span class="desc">Start a new virtual LAN and invite your friends to it.</span></div>
+      </div>
+      <form class="container-body" id="create-form" novalidate>
+        <div class="field">
+          <label for="f-netname">Network name</label>
+          <input class="input" id="f-netname" autocomplete="off" spellcheck="false" placeholder="blur" maxlength="20" aria-describedby="h-netname e-netname">
+          <div class="hint" id="h-netname">Letters and numbers. Your friends will see this name.</div>
+          <div class="field-error" id="e-netname" hidden></div>
+        </div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary" id="create-btn">Create network</button></div>
+      </form>
+    </section>
+    <section class="container" aria-labelledby="join-title">
+      <div class="container-header">
+        <div><h2 id="join-title">Join a network</h2><span class="desc">Got an invite code from a friend? Paste it here.</span></div>
+      </div>
+      <form class="container-body" id="join-form" novalidate>
+        <div class="field">
+          <label for="f-code">Invite code</label>
+          <input class="input" id="f-code" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="blur-7K3M-9X2Q-8W4T" aria-describedby="h-code e-code">
+          <div class="hint" id="h-code">Paste the code a friend sent you.</div>
+          <div class="field-error" id="e-code" hidden></div>
+        </div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary" id="join-btn">Join network</button></div>
+      </form>
+    </section>
+  </div>
+
+  <section class="container" id="net-box" aria-labelledby="net-title" hidden>
+    <div class="container-header">
+      <div><h2 id="net-title">Network <span id="net-name"></span></h2><span class="desc">Send this code to friends so they can join. Anyone with it can join this network.</span></div>
+    </div>
+    <div class="container-body">
+      <div class="invite-row copy-wrap">
+        <code class="invite-code" id="v-invite">—</code>
+        <button type="button" class="btn" id="copy-invite">Copy invite code</button>
+      </div>
+      <div class="net-actions"><button type="button" class="btn" id="leave-btn">Leave network</button></div>
+    </div>
+  </section>
+
+  <section class="container" id="pc-box" aria-labelledby="pc-title">
     <div class="container-header">
       <div><h2 id="pc-title">This PC</h2><span class="desc">How your friends see this computer on the virtual LAN.</span></div>
     </div>
@@ -369,7 +419,7 @@ dialog.modal::backdrop { background: var(--overlay); }
     </div>
   </section>
 
-  <section class="container" aria-labelledby="players-title">
+  <section class="container" id="players-box" aria-labelledby="players-title">
     <div class="container-header">
       <div>
         <h2 id="players-title">Players <span class="counter" id="players-count"></span></h2>
@@ -385,7 +435,7 @@ dialog.modal::backdrop { background: var(--overlay); }
       </div>
       <div class="empty" id="peers-empty" hidden>
         <b>No one else is here yet</b>
-        <p>Send your friends the zainVPN installer. They'll show up here once they connect.</p>
+        <p>Send your friends the invite code above. They'll show up here once they join.</p>
       </div>
     </div>
   </section>
@@ -407,18 +457,6 @@ dialog.modal::backdrop { background: var(--overlay); }
           <input class="input" id="f-server" name="server" autocomplete="off" spellcheck="false" autocapitalize="off" inputmode="url" aria-describedby="h-server e-server">
           <div class="hint" id="h-server">Host name or IP address of your group's coordinator, optionally with :port (default 29814).</div>
           <div class="field-error" id="e-server" hidden></div>
-        </div>
-        <div class="field">
-          <label for="f-network">Network name</label>
-          <input class="input" id="f-network" name="network" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="h-network e-network">
-          <div class="hint" id="h-network">Everyone with the same network name and password plays together.</div>
-          <div class="field-error" id="e-network" hidden></div>
-        </div>
-        <div class="field">
-          <label for="f-password">Network password</label>
-          <input class="input" id="f-password" name="password" type="password" autocomplete="new-password" placeholder="Leave blank to keep the current password" aria-describedby="h-password e-password">
-          <div class="hint" id="h-password">Required when you change the network name.</div>
-          <div class="field-error" id="e-password" hidden></div>
         </div>
         <div id="form-alert" aria-live="polite"></div>
         <div class="form-actions">
@@ -510,6 +548,7 @@ dialog.modal::backdrop { background: var(--overlay); }
     error: ['error', 'Error'],
     starting: ['progress', 'Connecting'],
     connecting: ['progress', 'Connecting'],
+    setup: ['stopped', 'Not in a network'],
   };
 
   for (const id of ['copy-ip', 'confirm-close']) $(id).append(icon(id === 'copy-ip' ? 'copy' : 'close'));
@@ -685,23 +724,20 @@ dialog.modal::backdrop { background: var(--overlay); }
 
   // ---- Settings ----
   const form = $('settings');
-  const fields = { name: $('f-name'), server: $('f-server'), network: $('f-network'), password: $('f-password') };
+  const fields = { name: $('f-name'), server: $('f-server') };
   let savedCfg = null, dirty = false, saving = false;
 
   function fillForm(cfg) {
     fields.name.value = cfg.name || '';
     fields.server.value = cfg.server || '';
-    fields.network.value = cfg.network || '';
-    fields.password.value = '';
     dirty = false;
     $('reset').disabled = true;
     showErrors({});
   }
 
   function syncForm(cfg) {
-    const same = savedCfg && ['name', 'server', 'network', 'hasPassword'].every((k) => savedCfg[k] === cfg[k]);
+    const same = savedCfg && ['name', 'server'].every((k) => savedCfg[k] === cfg[k]);
     savedCfg = cfg;
-    fields.password.placeholder = cfg.hasPassword ? 'Leave blank to keep the current password' : 'Enter the network password';
     if (!same && !dirty && !saving) fillForm(cfg);
   }
 
@@ -711,11 +747,6 @@ dialog.modal::backdrop { background: var(--overlay); }
     else if ([...v.name].length > 32) errs.name = 'Use 32 characters or fewer.';
     if (!v.server) errs.server = 'Enter the coordinator address.';
     else if (/^[a-z][a-z0-9+.-]*:\/\/|[\s/\\@?#]/i.test(v.server)) errs.server = 'Enter just a host name or IP address, optionally with :port. For example: 203.0.113.10 or vpn.example.com:29814';
-    if (!v.network) errs.network = 'Enter a network name.';
-    else if (norm(v.network).length > 64) errs.network = 'Use 64 characters or fewer.';
-    if (!v.password && (!savedCfg.hasPassword || norm(v.network) !== norm(savedCfg.network))) {
-      errs.password = 'Enter the password for this network.';
-    }
     return errs;
   }
 
@@ -750,32 +781,90 @@ dialog.modal::backdrop { background: var(--overlay); }
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (saving || !savedCfg) return;
-    const v = {
-      name: fields.name.value.trim(),
-      server: fields.server.value.trim(),
-      network: fields.network.value.trim(),
-      password: fields.password.value,
-    };
+    const v = { name: fields.name.value.trim(), server: fields.server.value.trim() };
     const errs = validate(v);
     showErrors(errs);
     const first = Object.keys(errs)[0];
     if (first) { fields[first].focus(); return; }
 
-    if (savedCfg.network && savedCfg.hasPassword) {
-      const oldNet = savedCfg.network, oldSrv = savedCfg.server || '';
-      let ok = true;
-      if (norm(v.network) !== norm(oldNet)) {
-        ok = await confirmDialog('Switch network?',
-          `You'll leave "${oldNet}" and join "${v.network}". Friends in "${oldNet}" will see you as offline, and you may get a different virtual IP.`,
-          'Switch network');
-      } else if (norm(v.server) !== norm(oldSrv)) {
-        ok = await confirmDialog('Change coordinator?',
-          `zainVPN will disconnect from ${oldSrv} and connect to ${v.server}. Only friends using the same coordinator can see you.`,
-          'Change coordinator');
-      }
+    const oldSrv = savedCfg.server || '';
+    if (savedCfg.inNetwork && oldSrv && norm(v.server) !== norm(oldSrv)) {
+      const ok = await confirmDialog('Change coordinator?',
+        `zainVPN will disconnect from ${oldSrv} and connect to ${v.server}. Only friends using the same coordinator can see you.`,
+        'Change coordinator');
       if (!ok) return;
     }
     save(v);
+  });
+
+  // ---- Create / join / leave ----
+  function fieldError(id, msg) {
+    const box = $('e-' + id), input = $('f-' + id);
+    if (msg) {
+      box.replaceChildren(icon('error'), el('span', '', msg));
+      box.hidden = false;
+      input.setAttribute('aria-invalid', 'true');
+    } else {
+      box.hidden = true;
+      box.replaceChildren();
+      input.removeAttribute('aria-invalid');
+    }
+  }
+  function flash(a) { $('flash').replaceChildren(...(a ? [a] : [])); }
+
+  async function networkAction(body, btn, label, field) {
+    if (btn.disabled) return null;
+    btn.disabled = true;
+    btn.replaceChildren(icon('progress'), el('span', '', 'Working'));
+    if (field) fieldError(field, '');
+    try {
+      const d = await api('/api/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-ZainVPN': '1' },
+        body: JSON.stringify(body),
+      });
+      render(d);
+      return d;
+    } catch (err) {
+      if (field) { fieldError(field, err.message); $('f-' + field).focus(); } else flash(makeAlert('error', 'Something went wrong', err.message, true));
+      return null;
+    } finally {
+      btn.disabled = false;
+      btn.replaceChildren(label);
+    }
+  }
+
+  $('create-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('f-netname').value.trim();
+    if (!name) { fieldError('netname', 'Enter a name for your network.'); $('f-netname').focus(); return; }
+    const d = await networkAction({ action: 'create', name }, $('create-btn'), 'Create network', 'netname');
+    if (d) {
+      $('f-netname').value = '';
+      flash(makeAlert('success', 'Network created', 'Copy the invite code and send it to your friends.', true));
+      $('copy-invite').focus();
+    }
+  });
+  $('join-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('f-code').value.trim();
+    if (!code) { fieldError('code', 'Paste the invite code a friend sent you.'); $('f-code').focus(); return; }
+    const d = await networkAction({ action: 'join', code }, $('join-btn'), 'Join network', 'code');
+    if (d) {
+      $('f-code').value = '';
+      flash(makeAlert('success', 'Joined ' + (d.status.network || 'the network'), 'Connecting to your friends…', true));
+    }
+  });
+  $('copy-invite').addEventListener('click', (e) => {
+    if (current && current.status.invite) copyWithFeedback(e.currentTarget, current.status.invite, 'Invite code copied');
+  });
+  $('leave-btn').addEventListener('click', async (e) => {
+    const name = (current && current.status.network) || 'this network';
+    const ok = await confirmDialog('Leave network?',
+      `You'll be disconnected from ${name}. You can rejoin later with the invite code, so make sure you've saved it.`,
+      'Leave network');
+    if (!ok) return;
+    if (await networkAction({ action: 'leave' }, e.currentTarget, 'Leave network')) flash(makeAlert('info', '', `You left ${name}.`, true));
   });
 
   async function save(v) {
@@ -838,6 +927,12 @@ dialog.modal::backdrop { background: var(--overlay); }
     setStatus($('nav-status'), type, label);
     setText($('nav-version'), d.version);
     setText($('footer'), 'zainVPN ' + d.version);
+    const inNet = st.state !== 'setup';
+    $('setup').hidden = inNet;
+    $('net-box').hidden = $('pc-box').hidden = $('players-box').hidden = !inNet;
+    setText($('net-name'), st.network ? `“${st.network}”` : '');
+    setText($('v-invite'), st.invite || '—');
+    $('copy-invite').disabled = !st.invite;
     renderPC(st, type, label);
     renderPeers(st.peers || [], st.server);
     syncForm(d.config);

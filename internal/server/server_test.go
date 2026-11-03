@@ -456,6 +456,75 @@ func TestJoinAssignsAddresses(t *testing.T) {
 	}
 }
 
+func TestJoinLabel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	ts := startServer(t, path)
+	// Invite networks are known by an opaque ID; the label is for display only.
+	id := strings.Repeat("0f", 16)
+	joinLabel := func(ts *testServer, network, label, auth, device string) *rawClient {
+		c := dial(t, ts)
+		c.send(proto.Msg{
+			Type: proto.MsgJoin, Version: proto.Version, Network: network, Label: label, Auth: auth,
+			Device: device, Name: device,
+		})
+		return c
+	}
+	a := joinLabel(ts, id, "Blur Night!", authA, "dev-a").welcome()
+	// The label is cleaned, and set once: later joins can't rename the network.
+	b := joinLabel(ts, id, "pwned", authA, "dev-b").welcome()
+	if a.ip != "10.77.0.1" || b.ip != "10.77.0.2" {
+		t.Errorf("got %s and %s", a.ip, b.ip)
+	}
+	// Legacy clients send no label.
+	c := mustJoin(t, ts, "LAN", authB, "dev-c", "Carol")
+	// A refused join doesn't touch the label either.
+	if msg := joinLabel(ts, id, "other", authB, "dev-m").refused(); !strings.Contains(msg, "password") {
+		t.Errorf("wrong auth for a labelled network: %q", msg)
+	}
+	long := joinLabel(ts, strings.Repeat("1e", 16), "<b>"+strings.Repeat("x", 40), authB, "dev-l").welcome()
+	if long.ip != "10.77.0.1" {
+		t.Errorf("first device in a new network got %s", long.ip)
+	}
+
+	check := func(snap Snapshot) {
+		t.Helper()
+		want := map[string]string{id: "blur-night", "lan": "", strings.Repeat("1e", 16): "b" + strings.Repeat("x", 19)}
+		if len(snap.Networks) != len(want) {
+			t.Fatalf("networks = %+v", snap.Networks)
+		}
+		for _, nw := range snap.Networks {
+			if l, ok := want[nw.Name]; !ok || nw.Label != l {
+				t.Errorf("network %q has label %q, want %q", nw.Name, nw.Label, l)
+			}
+		}
+	}
+	check(ts.Snapshot())
+	js, err := json.Marshal(ts.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Count(js, []byte(`"label":`)) != 2 {
+		t.Errorf("want a label only on the two invite networks:\n%s", js)
+	}
+
+	// Labels survive a restart.
+	for _, c := range []*rawClient{a, b, c, long} {
+		c.conn.Close()
+	}
+	for _, nw := range ts.Snapshot().Networks {
+		waitOnline(t, ts, nw.Name, 0)
+	}
+	ts.stop()
+	ts2 := startServer(t, path)
+	check(ts2.Snapshot())
+	if c := joinLabel(ts2, id, "", authA, "dev-a").welcome(); c.ip != "10.77.0.1" {
+		t.Errorf("rejoin without a label got %s", c.ip)
+	}
+	if nw := findNetwork(ts2.Snapshot(), id); nw.Label != "blur-night" {
+		t.Errorf("label after a join without one = %q", nw.Label)
+	}
+}
+
 func TestRejoinKeepsAddress(t *testing.T) {
 	ts := startServer(t, "")
 	a := mustJoin(t, ts, "lan", authA, "dev-a", "Alice")

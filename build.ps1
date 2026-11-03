@@ -1,17 +1,19 @@
 <#
 .SYNOPSIS
-  Builds zainvpn.exe and the one-file installer for friends (dist\zainVPN-Setup.exe).
+  Builds zainvpn.exe, zainvpn-app.exe and the installer for friends (dist\zainVPN-Setup.exe).
 
 .DESCRIPTION
-  The coordinator address, network name and password are baked into the installer
-  as defaults, so friends only pick a nickname. Values not given on the command
-  line are read from build.config.json (copy build.config.example.json).
+  The installer only contains the coordinator address (nothing secret); friends
+  join networks with invite codes. deploy.sh builds the same installer on the
+  server, so you only need this script for local testing. Values not given on
+  the command line are read from build.config.json (copy build.config.example.json).
+  Needs Go and NSIS (makensis): winget install GoLang.Go NSIS.NSIS
 
 .EXAMPLE
-  .\build.ps1 -Server 1.2.3.4 -Network blur -Password secret
+  .\build.ps1 -Server 1.2.3.4
 
 .EXAMPLE
-  .\build.ps1 -Server 1.2.3.4 -Network blur -Password secret -Publish
+  .\build.ps1 -Server 1.2.3.4 -Publish
   Also uploads the installer to the coordinator dashboard (http://1.2.3.4:21958 unless
   -DashboardUrl is given), where friends download it from the sign-in page. Asks for
   the admin password unless -AdminPassword or build.config.json provides it.
@@ -25,9 +27,6 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$Server,
-    [string]$Network,
-    [string]$Password,
-    [string]$Name,
     [string]$Version,
     [switch]$SkipInstaller,
     [switch]$ServerBinaries,
@@ -55,25 +54,18 @@ function Find-Tool([string]$name, [string[]]$candidates) {
     return $null
 }
 
-function Find-Iscc {
+function Find-Makensis {
     $candidates = @(
-        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
-        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+        "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+        "$env:ProgramFiles\NSIS\makensis.exe"
     )
-    foreach ($key in 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1',
-                     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1',
-                     'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1') {
-        $item = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
-        if ($item -and $item.PSObject.Properties['InstallLocation'] -and $item.InstallLocation) {
-            $candidates += Join-Path $item.InstallLocation 'ISCC.exe'
-        }
-    }
-    return Find-Tool 'ISCC.exe' $candidates
+    $candidates += Get-ChildItem -Path "$env:LOCALAPPDATA\Programs" -Filter makensis.exe -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty FullName
+    return Find-Tool 'makensis.exe' $candidates
 }
 
 # Invoke-GoBuild cross-compiles $pkg with CGO off, restoring GOOS/GOARCH/CGO_ENABLED afterwards.
-function Invoke-GoBuild([string]$goos, [string]$goarch, [string]$out, [string]$pkg) {
+function Invoke-GoBuild([string]$goos, [string]$goarch, [string]$out, [string]$pkg, [string]$extraLdflags = '') {
     if (-not $PSCmdlet.ShouldProcess($out, "go build $pkg ($goos/$goarch)")) { return }
     $saved = @{}
     foreach ($k in 'GOOS', 'GOARCH', 'CGO_ENABLED') { $saved[$k] = [Environment]::GetEnvironmentVariable($k, 'Process') }
@@ -81,30 +73,11 @@ function Invoke-GoBuild([string]$goos, [string]$goarch, [string]$out, [string]$p
         $env:GOOS = $goos
         $env:GOARCH = $goarch
         $env:CGO_ENABLED = '0'
-        & $go -C $root build -trimpath -ldflags "-s -w -X main.version=$exeVersion" -o $out $pkg
+        & $go -C $root build -trimpath -ldflags "-s -w $extraLdflags -X main.version=$exeVersion" -o $out $pkg
         if ($LASTEXITCODE -ne 0) { throw "go build $pkg ($goos/$goarch) failed with exit code $LASTEXITCODE" }
     } finally {
         foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k], 'Process') }
     }
-}
-
-# Find-ServerPackage picks the coordinator's main package under cmd\.
-function Find-ServerPackage {
-    $dirs = @(Get-ChildItem -LiteralPath (Join-Path $root 'cmd') -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ne 'zainvpn' -and (Get-ChildItem -LiteralPath $_.FullName -Filter *.go -File) })
-    $pick = @($dirs | Where-Object { $_.Name -match 'server|coord' })
-    if ($pick.Count -eq 0) { $pick = $dirs }
-    if ($pick.Count -ne 1) {
-        throw "Can't tell which cmd\ package is the coordinator (found: $(($dirs | ForEach-Object Name) -join ', '))"
-    }
-    return $pick[0].Name
-}
-
-# ConvertTo-IssString escapes $s for a Pascal single-quoted string in the installer
-# script. ISCC's command line can't carry a double quote, so " becomes '#34'.
-function ConvertTo-IssString([string]$label, [string]$s) {
-    if ($s -match '[\x00-\x1f]') { throw "$label contains a control character" }
-    return $s.Replace("'", "''").Replace('"', "'#34'")
 }
 
 # --- settings -----------------------------------------------------------------
@@ -118,15 +91,14 @@ if (Test-Path -LiteralPath $configPath) {
     }
     $cfg = @{}
     foreach ($p in $json.PSObject.Properties) { $cfg[$p.Name] = [string]$p.Value }
-    foreach ($key in 'Server', 'Network', 'Password', 'Name', 'DashboardUrl', 'AdminPassword') {
+    foreach ($key in 'Server', 'DashboardUrl', 'AdminPassword') {
         if (-not $PSBoundParameters.ContainsKey($key) -and $cfg.ContainsKey($key)) {
             Set-Variable -Name $key -Value $cfg[$key]
         }
     }
 }
 $Server = "$Server".Trim()
-$Network = "$Network".Trim()
-$Name = "$Name".Trim()
+if ($Server -match '["\x00-\x1f]') { throw 'Server contains a quote or control character' }
 
 if (-not $Version) {
     $describe = $null
@@ -146,10 +118,9 @@ $exeVersion = $Version
 if ($exeVersion -notmatch '^[0-9A-Za-z._+-]+$') {
     throw "Version '$exeVersion' may only contain letters, digits and . _ + -"
 }
-# Inno Setup needs a numeric x.y[.z[.w]] version; take it from a tag like v1.2.3-4-gabc.
+# The installer needs a numeric x.y.z version; take it from a tag like v1.2.3-4-gabc.
 $appVersion = '0.1.0'
-if ($exeVersion -match '^v?(\d{1,5}(?:\.\d{1,5}){1,3})(?:[-+].*)?$' -and
-    -not ($Matches[1].Split('.') | Where-Object { [int]$_ -gt 65535 })) {
+if ($exeVersion -match '^v?(\d{1,5}\.\d{1,5}\.\d{1,5})(?:[-+].*)?$') {
     $appVersion = $Matches[1]
 }
 
@@ -158,36 +129,33 @@ if ($exeVersion -match '^v?(\d{1,5}(?:\.\d{1,5}){1,3})(?:[-+].*)?$' -and
 $go = Find-Tool 'go.exe' @("$env:LOCALAPPDATA\Programs\go\bin\go.exe", 'C:\Program Files\Go\bin\go.exe')
 if (-not $go) { throw 'Go not found on PATH or in the usual places. Install it from https://go.dev/dl/' }
 
-$iscc = $null
+$makensis = $null
 if (-not $SkipInstaller) {
-    $iscc = Find-Iscc
-    if (-not $iscc) { throw 'Inno Setup 6 (ISCC.exe) not found. Install it with: winget install JRSoftware.InnoSetup' }
-}
-
-if (-not (Test-Path -Path (Join-Path $root 'cmd\zainvpn\*.go'))) {
-    if (-not $WhatIfPreference) { throw "No Go sources in $(Join-Path $root 'cmd\zainvpn')" }
-    Write-Warning 'cmd\zainvpn has no Go sources yet'
+    $makensis = Find-Makensis
+    if (-not $makensis) { throw 'NSIS (makensis.exe) not found. Install it with: winget install NSIS.NSIS' }
 }
 
 Write-Step "zainvpn $exeVersion (installer version $appVersion)"
-Write-Host "    go:   $go"
-if ($iscc) { Write-Host "    iscc: $iscc" }
+Write-Host "    go:       $go"
+if ($makensis) { Write-Host "    makensis: $makensis" }
 
 # --- build ----------------------------------------------------------------------
+# Icons/manifests come from cmd\*\rsrc_windows_amd64.syso, generated from
+# installer\winres\*.json with: go run github.com/tc-hib/go-winres@v0.3.3 make --in installer\winres\<exe>.json --out cmd\<exe>\rsrc
 
 New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
 
-Write-Step 'Building build\zainvpn.exe (windows/amd64)'
+Write-Step 'Building build\zainvpn.exe and build\zainvpn-app.exe (windows/amd64)'
 Invoke-GoBuild 'windows' 'amd64' (Join-Path $buildDir 'zainvpn.exe') './cmd/zainvpn'
+Invoke-GoBuild 'windows' 'amd64' (Join-Path $buildDir 'zainvpn-app.exe') './cmd/zainvpn-app' '-H windowsgui'
 Copy-Item -LiteralPath (Join-Path $root 'third_party\wintun\amd64\wintun.dll') -Destination $buildDir -Force
 
 if ($ServerBinaries) {
-    $pkg = Find-ServerPackage
     $serverDir = Join-Path $distDir 'server'
     New-Item -ItemType Directory -Force -Path $serverDir | Out-Null
     foreach ($arch in 'amd64', 'arm64') {
-        Write-Step "Building dist\server\$pkg-linux-$arch"
-        Invoke-GoBuild 'linux' $arch (Join-Path $serverDir "$pkg-linux-$arch") "./cmd/$pkg"
+        Write-Step "Building dist\server\zainvpn-server-linux-$arch"
+        Invoke-GoBuild 'linux' $arch (Join-Path $serverDir "zainvpn-server-linux-$arch") './cmd/zainvpn-server'
     }
 }
 
@@ -197,37 +165,22 @@ if ($SkipInstaller) {
     return
 }
 
-$missing = @('Server', 'Network', 'Password' | Where-Object { -not (Get-Variable -Name $_ -ValueOnly) })
-if ($missing) {
-    Write-Warning ("No {0} given (parameters or build.config.json): the installer will have empty fields for friends to fill in." -f ($missing -join '/'))
+if (-not $Server) {
+    Write-Warning 'No -Server given (parameter or build.config.json): friends will have to type the coordinator address.'
 }
-$pwInfo = if ($Password) { "set, $($Password.Length) chars" } else { 'empty' }
-Write-Step "Building the installer (server '$Server', network '$Network', password $pwInfo)"
-
-$isccArgs = @(
-    '/Qp',
-    "/DAppVersion=$appVersion",
-    "/DDefServer=$(ConvertTo-IssString 'Server' $Server)",
-    "/DDefNetwork=$(ConvertTo-IssString 'Network' $Network)",
-    "/DDefPassword=$(ConvertTo-IssString 'Password' $Password)",
-    "/DDefName=$(ConvertTo-IssString 'Name' $Name)",
-    "/DSourceDir=$buildDir",
-    "/DOutputDir=$distDir",
-    (Join-Path $root 'installer\zainvpn.iss')
-)
+Write-Step "Building the installer (coordinator '$Server')"
+New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 $setup = Join-Path $distDir 'zainVPN-Setup.exe'
-if (-not $PSCmdlet.ShouldProcess($setup, 'ISCC installer\zainvpn.iss')) { return }
-& $iscc @isccArgs
-if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
-if (-not (Test-Path -LiteralPath $setup)) { throw "ISCC succeeded but $setup is missing" }
+if (-not $PSCmdlet.ShouldProcess($setup, 'makensis installer\zainvpn.nsi')) { return }
+& $makensis /V2 "/DVERSION=$appVersion" "/DSERVER=$Server" "/DSRC=$buildDir" "/DOUT=$setup" (Join-Path $root 'installer\zainvpn.nsi')
+if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE" }
+if (-not (Test-Path -LiteralPath $setup)) { throw "makensis succeeded but $setup is missing" }
 
 $size = (Get-Item -LiteralPath $setup).Length / 1MB
 Write-Host ''
 Write-Host ('Installer: {0} ({1:N1} MB)' -f $setup, $size) -ForegroundColor Green
 Write-Host ('SHA-256:   {0}' -f (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash)
-if ($Password) {
-    Write-Warning "Anyone with this installer can join network '$Network': it contains the password. Share it only with friends."
-}
+Write-Host 'It only contains the coordinator address, so it is safe to share; friends join with an invite code.'
 
 if ($Publish) {
     if (-not $DashboardUrl) {

@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -55,12 +56,136 @@ var (
 
 var ErrBadPacket = errors.New("bad packet")
 
-// Keys are derived from a network's name and password.
+// Keys are derived from an invite code (or a network name and password).
 type Keys struct {
 	aead cipher.AEAD
-	// Auth proves knowledge of the password to the coordinator. It is derived
+	// Auth proves knowledge of the secret to the coordinator. It is derived
 	// separately from the data key, so the coordinator can't read traffic.
 	Auth string
+	// NetworkID is what the coordinator knows the network by.
+	NetworkID string
+}
+
+// Invite codes look like "blur-7K3M-9X2Q-8W4T": a label the creator chose,
+// then 11 random Crockford base32 characters and a check character. The
+// random part is the secret; only values derived from it leave the client.
+type Invite struct {
+	Label  string // lowercase letters, digits and dashes
+	Secret string // 12 uppercase characters, no dashes
+}
+
+const (
+	inviteAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	inviteRandom   = 11
+	inviteLen      = inviteRandom + 1
+	maxLabelLen    = 20
+)
+
+var ErrBadInvite = errors.New("that doesn't look like a zainVPN invite code (example: blur-7K3M-9X2Q-8W4T)")
+
+// NewInvite creates a fresh invite code for a new network called label.
+func NewInvite(label string) Invite {
+	l := CleanLabel(label)
+	var b [inviteRandom]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	s := make([]byte, 0, inviteLen)
+	for _, x := range b {
+		s = append(s, inviteAlphabet[x&31]) // 256 is a multiple of 32: unbiased
+	}
+	return Invite{Label: l, Secret: string(append(s, inviteCheck(l, s)))}
+}
+
+// CleanLabel turns a user-typed network name into a label: lowercase,
+// spaces become dashes, other characters are dropped.
+func CleanLabel(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			dash = false
+		case (r == ' ' || r == '-' || r == '_') && b.Len() > 0 && !dash:
+			b.WriteByte('-')
+			dash = true
+		}
+		if b.Len() >= maxLabelLen {
+			break
+		}
+	}
+	l := strings.Trim(b.String(), "-")
+	if l == "" {
+		l = "lan"
+	}
+	return l
+}
+
+// ParseInvite accepts a code in any case, with or without the dashes in
+// the random part, and with common Crockford misreadings (O for 0, I/L for 1).
+func ParseInvite(code string) (Invite, error) {
+	code = strings.Join(strings.Fields(code), "")
+	var secret []byte
+	i := len(code)
+	for i > 0 && len(secret) < inviteLen {
+		i--
+		c := code[i]
+		if c == '-' {
+			continue
+		}
+		switch c = upper(c); c {
+		case 'O':
+			c = '0'
+		case 'I', 'L':
+			c = '1'
+		}
+		if strings.IndexByte(inviteAlphabet, c) < 0 {
+			return Invite{}, ErrBadInvite
+		}
+		secret = append(secret, c)
+	}
+	label := strings.TrimRight(code[:i], "-")
+	if len(secret) != inviteLen || label == "" || CleanLabel(label) != strings.ToLower(label) {
+		return Invite{}, ErrBadInvite
+	}
+	slices.Reverse(secret)
+	inv := Invite{Label: strings.ToLower(label), Secret: string(secret)}
+	if inviteCheck(inv.Label, secret[:inviteRandom]) != secret[inviteRandom] {
+		return Invite{}, errors.New("that invite code has a typo; check it and try again")
+	}
+	return inv, nil
+}
+
+func upper(c byte) byte {
+	if c >= 'a' && c <= 'z' {
+		return c - 'a' + 'A'
+	}
+	return c
+}
+
+// inviteCheck catches 31 of 32 typos in the label or random part, so a
+// mistyped code fails here instead of creating an empty network.
+func inviteCheck(label string, random []byte) byte {
+	h := sha256.Sum256([]byte(label + ":" + string(random)))
+	return inviteAlphabet[h[0]&31]
+}
+
+// String formats the code for sharing: label-XXXX-XXXX-XXXX.
+func (inv Invite) String() string {
+	s := inv.Secret
+	return inv.Label + "-" + s[0:4] + "-" + s[4:8] + "-" + s[8:12]
+}
+
+// Keys derives the network's keys. Like DeriveKeys it costs ~100ms and 64 MiB.
+func (inv Invite) Keys() (*Keys, error) {
+	salt := []byte("zainvpn/v2/" + inv.Label)
+	m := argon2.IDKey([]byte(inv.Secret), salt, 2, 64*1024, 4, 80)
+	aead, err := chacha20poly1305.NewX(m[:32])
+	if err != nil {
+		return nil, err
+	}
+	return &Keys{aead: aead, Auth: hex.EncodeToString(m[32:64]), NetworkID: hex.EncodeToString(m[64:80])}, nil
 }
 
 // NormalizeNetwork makes network names case- and whitespace-insensitive.
@@ -77,7 +202,7 @@ func DeriveKeys(network, password string) (*Keys, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Keys{aead: aead, Auth: hex.EncodeToString(m[32:])}, nil
+	return &Keys{aead: aead, Auth: hex.EncodeToString(m[32:]), NetworkID: NormalizeNetwork(network)}, nil
 }
 
 // AuthHash is what the coordinator stores to check a network's password.
@@ -137,7 +262,8 @@ type Msg struct {
 
 	// join
 	Version int      `json:"version,omitempty"`
-	Network string   `json:"network,omitempty"`
+	Network string   `json:"network,omitempty"` // Keys.NetworkID
+	Label   string   `json:"label,omitempty"`   // the invite's label, shown on the dashboard
 	Auth    string   `json:"auth,omitempty"`
 	Device  string   `json:"device,omitempty"`
 	Name    string   `json:"name,omitempty"`

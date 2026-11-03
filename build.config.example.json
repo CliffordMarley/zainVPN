@@ -1,9 +1,6 @@
 {
-  "_comment": "Copy to build.config.json (gitignored). build.ps1 uses these when the matching parameters are not given. server is host or host:port (default port 29814). Leave name empty so each friend picks a nickname. dashboardUrl/adminPassword are used by -Publish (dashboardUrl defaults to http://<server host>:21958; leave adminPassword empty to be asked).",
+  "_comment": "Copy to build.config.json (gitignored). build.ps1 uses these when the matching parameters are not given. server is host or host:port (default port 29814). dashboardUrl/adminPassword are used by -Publish (dashboardUrl defaults to http://<server host>:21958; leave adminPassword empty to be asked).",
   "server": "203.0.113.10",
-  "network": "blur",
-  "password": "change-me",
-  "name": "",
   "dashboardUrl": "",
   "adminPassword": ""
 }

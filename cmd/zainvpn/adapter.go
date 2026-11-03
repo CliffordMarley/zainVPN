@@ -100,6 +100,12 @@ func (h *adapterHost) SetAddress(p netip.Prefix) error {
 	return nil
 }
 
+// ClearAddress removes the virtual address, so a network this PC left
+// doesn't linger in Windows.
+func (h *adapterHost) ClearAddress() error {
+	return h.luid.FlushIPAddresses(windows.AF_INET)
+}
+
 // configure sets the interface metric to 1, so Windows sends 255.255.255.255
 // broadcasts (LAN game discovery) out of this adapter, and the MTU. The
 // interface row may not exist yet right after the adapter is created.

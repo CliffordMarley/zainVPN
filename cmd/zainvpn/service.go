@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -176,8 +177,7 @@ func waitRunning(s *mgr.Service) error {
 func cmdInstall(args []string) error {
 	fl := flag.NewFlagSet("install", flag.ContinueOnError)
 	server := fl.String("server", "", "coordinator address (host or host:port)")
-	network := fl.String("network", "", "network name")
-	password := fl.String("password", "", "network password")
+	invite := fl.String("invite", "", "invite code of a network to join (default: none; create or join one in the app)")
 	name := fl.String("name", "", "nickname shown to friends (default: computer name)")
 	if err := fl.Parse(args); err != nil {
 		return errUsage
@@ -205,18 +205,19 @@ func cmdInstall(args []string) error {
 	fl.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "server":
-			cfg.Server = *server
-		case "network":
-			cfg.Network = *network
-		case "password":
-			cfg.Password = *password
+			cfg.Server = strings.TrimSpace(*server)
+		case "invite":
+			cfg.Invite = strings.TrimSpace(*invite)
 		case "name":
-			cfg.Name = *name
+			cfg.Name = strings.TrimSpace(*name)
 		}
 	})
 	ensureIdentity(&cfg) // also trims an over-long nickname, as the coordinator would
-	// Incomplete settings don't stop the install (a silent install may leave
-	// fields empty): the service then waits for them in the dashboard.
+	// Bad or missing settings don't stop the install (a silent install may
+	// leave fields empty): they can be fixed in the app afterwards.
+	if err := cleanInvite(&cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: ignoring the invite code: %v\n", err)
+	}
 	incomplete := validateConfig(cfg)
 	if err := saveConfig(path, cfg); err != nil {
 		return err
@@ -227,12 +228,15 @@ func cmdInstall(args []string) error {
 	if err := installService(exe); err != nil {
 		return err
 	}
-	if incomplete != nil {
-		fmt.Fprintf(os.Stderr, "warning: %v (pass --server, --network and --password, or use the dashboard)\n", incomplete)
+	switch label := networkLabel(cfg.Invite); {
+	case incomplete != nil:
+		fmt.Fprintf(os.Stderr, "warning: %v (pass --server, or set it in the zainVPN app)\n", incomplete)
 		fmt.Printf("zainVPN is installed and running, but not connected yet.\nFinish setting it up at http://%s/\n", uiAddr)
-		return nil
+	case label == "":
+		fmt.Printf("zainVPN is installed and running as %q.\nCreate or join a network at http://%s/\n", cfg.Name, uiAddr)
+	default:
+		fmt.Printf("zainVPN is installed and running as %q on network %q.\nDashboard: http://%s/\n", cfg.Name, label, uiAddr)
 	}
-	fmt.Printf("zainVPN is installed and running as %q on network %q.\nDashboard: http://%s/\n", cfg.Name, cfg.Network, uiAddr)
 	return nil
 }
 

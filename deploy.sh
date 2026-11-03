@@ -229,11 +229,30 @@ port_of() { printf '%s' "${1##*:}"; }
 
 # --- Container ------------------------------------------------------------------
 
+# installer_server is the coordinator address baked into the Windows installer:
+# ZAINVPN_PUBLIC_ADDR from .env, else this instance's public IP.
+installer_server() {
+  local addr port
+  addr=$(env_get ZAINVPN_PUBLIC_ADDR 2>/dev/null || true)
+  if [ -z "$addr" ]; then
+    addr=$(public_ip)
+    [ "$addr" = '<your-server-ip>' ] && addr=""
+    port=$(port_of "$LISTEN_ADDR")
+    if [ -n "$addr" ] && [ "$port" != 29814 ]; then addr="$addr:$port"; fi
+  fi
+  printf '%s' "$addr"
+}
+
 build_image() {
-  local version
+  local version server count
   version=$(build_version)
-  step "Building image $IMAGE (version $version)"
-  docker_ build --pull -t "$IMAGE" --build-arg VERSION="$version" .
+  server=$(installer_server)
+  count=$(git_ rev-list --count HEAD 2>/dev/null || echo 0)
+  INSTALLER_SERVER=$server
+  step "Building image $IMAGE (version $version, installer for ${server:-<no address>})"
+  [ -n "$server" ] || warn "Couldn't find this server's public IP; set ZAINVPN_PUBLIC_ADDR in .env so installers know where to connect."
+  docker_ build --pull -t "$IMAGE" --build-arg VERSION="$version" \
+    --build-arg INSTALLER_VERSION="0.2.$count" --build-arg INSTALLER_SERVER="$server" .
 }
 
 restart_container() {
@@ -321,7 +340,7 @@ summary() {
 
   printf '\n%s%szainVPN coordinator is running.%s\n\n' "$GREEN" "$BOLD" "$RESET"
   printf '  %-22s %s%s:%s%s\n' "Coordinator address" "$BOLD" "$ip" "$control" "$RESET"
-  printf '  %-22s %s\n' "" "${DIM}use it as: build.ps1 -Server $ip:$control${RESET}"
+  printf '  %-22s %s\n' "Installer" "built for ${INSTALLER_SERVER:-<no address>}; friends download it from the dashboard sign-in page"
   if [ -n "$HTTP_ADDR" ] && [ "$HTTP_ADDR" != off ]; then
     dash_port=$(port_of "$HTTP_ADDR")
     printf '  %-22s %shttp://%s:%s%s\n' "Admin dashboard" "$BOLD" "$ip" "$dash_port" "$RESET"

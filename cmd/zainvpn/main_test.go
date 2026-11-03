@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,11 +13,12 @@ import (
 	"time"
 
 	"zainvpn/internal/client"
+	"zainvpn/internal/proto"
 )
 
 func TestConfigBOMAndIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	// As written by the installer: UTF-8 BOM, CRLF, no deviceId, no name.
+	// UTF-8 BOM, CRLF, no deviceId or name, and the old network/password fields (ignored).
 	in := "\xef\xbb\xbf{\r\n  \"server\": \" 203.0.113.10 \",\r\n  \"network\": \"Blur\",\r\n  \"password\": \"pw\"\r\n}\r\n"
 	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
 		t.Fatal(err)
@@ -25,7 +27,7 @@ func TestConfigBOMAndIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Server != "203.0.113.10" || c.Network != "Blur" || c.Password != "pw" {
+	if c.Server != "203.0.113.10" || c.Invite != "" {
 		t.Fatalf("loaded %+v", c)
 	}
 	if !ensureIdentity(&c) || len(c.DeviceID) != 32 || c.Name == "" {
@@ -66,7 +68,8 @@ func TestCheckServer(t *testing.T) {
 }
 
 func TestUIGuardAndConfig(t *testing.T) {
-	d := &demo{t0: time.Now(), cfg: client.Config{Server: "s", Network: "net", Password: "pw", Name: "me", DeviceID: "d"}}
+	inv := proto.NewInvite("blur").String()
+	d := &demo{t0: time.Now(), cfg: client.Config{Server: "s", Invite: inv, Name: "me", DeviceID: "d"}}
 	h := newUIServer(d, nil).Handler
 	do := func(method, host, body string, hdr map[string]string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "http://"+host+"/api/config", strings.NewReader(body))
@@ -82,7 +85,7 @@ func TestUIGuardAndConfig(t *testing.T) {
 	}
 	ok := map[string]string{"X-ZainVPN": "1", "Content-Type": "application/json"}
 
-	if w := do("GET", "127.0.0.1:7779", "", nil); w.Code != 200 || strings.Contains(w.Body.String(), "pw") {
+	if w := do("GET", "127.0.0.1:7779", "", nil); w.Code != 200 {
 		t.Fatalf("status: %d %s", w.Code, w.Body)
 	}
 	if w := do("GET", "evil.com", "", nil); w.Code != 403 {
@@ -94,14 +97,43 @@ func TestUIGuardAndConfig(t *testing.T) {
 	if w := do("POST", "127.0.0.1:7779", `{}`, map[string]string{"X-ZainVPN": "1", "Content-Type": "text/plain"}); w.Code != 403 {
 		t.Fatalf("text/plain: %d", w.Code)
 	}
-	// Changing the network needs a password; keeping it doesn't.
-	if w := do("POST", "127.0.0.1:7779", `{"server":"s","network":"other","name":"me"}`, ok); w.Code != 400 {
-		t.Fatalf("network change without password: %d", w.Code)
-	}
-	if w := do("POST", "127.0.0.1:7779", `{"server":"s2:29814","network":" NET ","name":"me2"}`, ok); w.Code != 200 {
+	if w := do("POST", "127.0.0.1:7779", `{"server":"s2:29814","name":"me2"}`, ok); w.Code != 200 {
 		t.Fatalf("save: %d %s", w.Code, w.Body)
 	}
-	if c := d.Config(); c.Server != "s2:29814" || c.Network != "NET" || c.Name != "me2" || c.Password != "pw" || c.DeviceID != "d" {
+	if c := d.Config(); c.Server != "s2:29814" || c.Invite != inv || c.Name != "me2" || c.DeviceID != "d" {
 		t.Fatalf("applied %+v", c)
+	}
+}
+
+func TestUINetworkActions(t *testing.T) {
+	d := &demo{t0: time.Now(), cfg: client.Config{Server: "s", Name: "me", DeviceID: "d"}}
+	h := newUIServer(d, nil).Handler
+	act := func(body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "http://127.0.0.1:7779/api/network", strings.NewReader(body))
+		r.Header.Set("X-ZainVPN", "1")
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	var resp struct{ Invite string }
+	w := act(`{"action":"create","name":"Blur Night"}`)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &resp) != nil || !strings.HasPrefix(resp.Invite, "blur-night-") {
+		t.Fatalf("create: %d %s", w.Code, w.Body)
+	}
+	if d.Config().Invite != resp.Invite {
+		t.Fatalf("invite not saved: %+v", d.Config())
+	}
+	if w := act(`{"action":"create","name":"other"}`); w.Code != 409 {
+		t.Fatalf("create while in a network: %d", w.Code)
+	}
+	if w := act(`{"action":"leave"}`); w.Code != 200 || d.Config().Invite != "" {
+		t.Fatalf("leave: %d %+v", w.Code, d.Config())
+	}
+	if w := act(`{"action":"join","code":"blur-AAAA-BBBB-CCCC"}`); w.Code != 400 || !strings.Contains(w.Body.String(), "invite code") {
+		t.Fatalf("bad code: %d %s", w.Code, w.Body)
+	}
+	if w := act(`{"action":"join","code":" ` + strings.ToLower(resp.Invite) + ` "}`); w.Code != 200 || d.Config().Invite != resp.Invite {
+		t.Fatalf("join: %d %s %+v", w.Code, w.Body, d.Config())
 	}
 }

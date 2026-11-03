@@ -62,6 +62,7 @@ type Handler struct {
 	failDelay   time.Duration // tests set this to 0
 
 	installer    string   // path of the uploaded installer; "" disables downloads
+	bundled      string   // installer built into the image, if any
 	downloadHash [32]byte // sha256 of the optional download code
 	downloadCode bool
 
@@ -114,9 +115,11 @@ func New(srv *server.Server, adminPassword, version string, controlPort int, log
 
 // EnableInstaller lets the admin upload the Windows installer, stored at
 // path, and lets anyone download it from the sign-in page. A non-empty code
-// must then be entered to download it.
-func (h *Handler) EnableInstaller(path, code string) {
+// must then be entered to download it. bundled is the installer built into
+// the Docker image (may be ""); the newer of it and an upload is served.
+func (h *Handler) EnableInstaller(path, bundled, code string) {
 	h.installer = path
+	h.bundled = bundled
 	h.downloadHash = sha256.Sum256([]byte(code))
 	h.downloadCode = code != ""
 }
@@ -285,13 +288,28 @@ type installerInfo struct {
 func (i *installerInfo) SizeText() string { return fmt.Sprintf("%.1f MB", float64(i.Size)/(1<<20)) }
 func (i *installerInfo) DateText() string { return i.Uploaded.Format("2 Jan 2006") }
 
-// installerInfo describes the uploaded installer, or returns nil if there is none.
-func (h *Handler) installerInfo() *installerInfo {
+// currentInstaller picks the newer of the uploaded and the bundled installer.
+func (h *Handler) currentInstaller() (string, os.FileInfo) {
 	if h.installer == "" {
-		return nil
+		return "", nil
 	}
-	fi, err := os.Stat(h.installer)
-	if err != nil {
+	var path string
+	var best os.FileInfo
+	for _, p := range []string{h.installer, h.bundled} {
+		if p == "" {
+			continue
+		}
+		if fi, err := os.Stat(p); err == nil && (best == nil || fi.ModTime().After(best.ModTime())) {
+			path, best = p, fi
+		}
+	}
+	return path, best
+}
+
+// installerInfo describes the installer being served, or returns nil if there is none.
+func (h *Handler) installerInfo() *installerInfo {
+	_, fi := h.currentInstaller()
+	if fi == nil {
 		return nil
 	}
 	return &installerInfo{Size: fi.Size(), Uploaded: fi.ModTime().UTC()}
@@ -318,7 +336,8 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	f, err := os.Open(h.installer)
+	path, _ := h.currentInstaller()
+	f, err := os.Open(path)
 	if err != nil {
 		http.Error(w, "installer unavailable", http.StatusNotFound)
 		return

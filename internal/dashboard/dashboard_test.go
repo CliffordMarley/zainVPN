@@ -249,7 +249,7 @@ func fakeExe() []byte {
 
 func TestInstallerUploadAndDownload(t *testing.T) {
 	h, _ := newTest(t)
-	h.EnableInstaller(filepath.Join(t.TempDir(), installerName), "")
+	h.EnableInstaller(filepath.Join(t.TempDir(), installerName), "", "")
 
 	if w := do(h, "GET", "/download", nil, nil); w.Code != http.StatusNotFound {
 		t.Errorf("download before upload: %d", w.Code)
@@ -304,7 +304,7 @@ func TestInstallerUploadAndDownload(t *testing.T) {
 func TestInstallerDownloadCode(t *testing.T) {
 	h, _ := newTest(t)
 	path := filepath.Join(t.TempDir(), installerName)
-	h.EnableInstaller(path, "letmein")
+	h.EnableInstaller(path, "", "letmein")
 	if err := os.WriteFile(path, fakeExe(), 0o644); err != nil {
 		t.Fatal(err)
 	}

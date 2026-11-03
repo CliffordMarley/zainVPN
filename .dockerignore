@@ -4,9 +4,8 @@
 Dockerfile
 build/
 dist/
-third_party/
-installer/
 *.exe
+*.iss
 .env
 .env.*
 zainvpn-state.json

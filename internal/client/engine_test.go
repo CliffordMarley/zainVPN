@@ -95,6 +95,8 @@ type testEnv struct {
 	logs *logBuf
 	srv  *server.Server
 	addr string // coordinator, TCP and UDP
+
+	invites map[string]string // see inviteFor
 }
 
 func newEnv(t *testing.T) *testEnv {
@@ -150,10 +152,23 @@ func (env *testEnv) engine(name, network, password string, noDirect bool) *testE
 	return env.engineAt(env.addr, name, network, password, noDirect)
 }
 
+// inviteFor maps the old network-name-and-password pairs these tests use to
+// invite codes: the same pair (name case-insensitive) gets the same code.
+func (env *testEnv) inviteFor(network, password string) string {
+	key := proto.NormalizeNetwork(network) + "\x00" + password
+	if env.invites == nil {
+		env.invites = map[string]string{}
+	}
+	if _, ok := env.invites[key]; !ok {
+		env.invites[key] = proto.NewInvite(network).String()
+	}
+	return env.invites[key]
+}
+
 func (env *testEnv) engineAt(server, name, network, password string, noDirect bool) *testEngine {
 	t := env.t
 	host := &fakeHost{pkts: make(chan []byte, 256)}
-	cfg := Config{Server: server, Network: network, Password: password, Name: name, DeviceID: "dev-" + name}
+	cfg := Config{Server: server, Invite: env.inviteFor(network, password), Name: name, DeviceID: "dev-" + name}
 	e := New(cfg, host, log.New(env.logs, name+": ", log.Lmicroseconds))
 	e.bind = netip.MustParseAddrPort("127.0.0.1:0")
 	e.noDirect = noDirect
@@ -306,11 +321,11 @@ func describe(pkt []byte) string {
 }
 
 func TestStatusBeforeRun(t *testing.T) {
-	cfg := Config{Server: "example.com", Network: "LAN", Password: "pw", Name: "zain", DeviceID: "d"}
+	cfg := Config{Server: "example.com", Invite: proto.NewInvite("LAN").String(), Name: "zain", DeviceID: "d"}
 	e := New(cfg, &fakeHost{pkts: make(chan []byte, 1)}, log.New(&logBuf{}, "", 0))
 	st := e.Status()
 	if st.State != StateStarting || st.IP != "" || st.Relay || st.Peers == nil || len(st.Peers) != 0 ||
-		st.Name != "zain" || st.Network != "LAN" || st.Server != "example.com" {
+		st.Name != "zain" || st.Network != "" || st.Invite != "" || st.Server != "example.com" {
 		t.Errorf("status before Run = %+v", st)
 	}
 	e.HandleOutbound(ipv4UDP(netip.MustParseAddr("10.77.0.1"), proto.Broadcast, "early")) // must not panic
@@ -336,14 +351,16 @@ func TestEnginesComeOnline(t *testing.T) {
 	}
 
 	st := a.Status()
-	if st.IP != ipA.String() || st.Name != "alice" || st.Network != "LAN Party" || st.Server != env.addr || st.Message != "" {
+	if st.IP != ipA.String() || st.Name != "alice" || st.Network != "lan-party" || st.Invite != a.cfg.Invite ||
+		st.Server != env.addr || st.Message != "" {
 		t.Errorf("alice's status = %+v", st)
 	}
 	if len(st.Peers) != 1 || st.Peers[0].Name != "bob" || st.Peers[0].IP != ipB.String() || !st.Peers[0].Online {
 		t.Errorf("alice's peers = %+v", st.Peers)
 	}
 	snap := env.srv.Snapshot()
-	if len(snap.Networks) != 1 || snap.Networks[0].Name != "lan party" || snap.Networks[0].Online != 2 {
+	if len(snap.Networks) != 1 || snap.Networks[0].Name != a.keys.NetworkID || snap.Networks[0].Label != "lan-party" ||
+		snap.Networks[0].Online != 2 {
 		t.Errorf("coordinator networks = %+v", snap.Networks)
 	}
 }
@@ -511,7 +528,7 @@ func TestSpoofedPacketsDropped(t *testing.T) {
 	inject(a.keys, ipB, ipA, ihl)
 	inject(a.keys, ipB, ipA, ok[:19])
 	// or that weren't sealed with this network's key.
-	wrong, err := proto.DeriveKeys("lan", "not the password")
+	wrong, err := proto.NewInvite("lan").Keys()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,34 +541,39 @@ func TestSpoofedPacketsDropped(t *testing.T) {
 	expectQuiet(t, 100*time.Millisecond, a, b)
 }
 
-func TestWrongPassword(t *testing.T) {
+// An invite with the same label but another secret is a different network.
+func TestDifferentInvite(t *testing.T) {
 	env := newEnv(t)
 	a := env.engine("alice", "lan", "hunter2", false)
-	waitFor(t, func() error {
-		if st := a.Status(); st.State != StateOnline {
-			return fmt.Errorf("alice: %+v", st)
-		}
-		return nil
-	})
 	m := env.engine("mallory", "LAN", "letmein", false)
 	waitFor(t, func() error {
-		if st := m.Status(); st.State != StateError {
-			return fmt.Errorf("mallory: %+v, want state %q", st, StateError)
+		for _, e := range []*testEngine{a, m} {
+			if st := e.Status(); st.State != StateOnline {
+				return fmt.Errorf("%s: %+v", e.cfg.Name, st)
+			}
 		}
 		return nil
 	})
-	st := m.Status()
-	if !strings.Contains(strings.ToLower(st.Message), "password") || st.IP != "" || len(st.Peers) != 0 {
-		t.Errorf("mallory's status = %+v, want an error about the password", st)
-	}
-	if addrs := m.host.addresses(); len(addrs) != 0 {
-		t.Errorf("mallory's adapter was configured: %v", addrs)
-	}
+	time.Sleep(200 * time.Millisecond)
 	if st := a.Status(); len(st.Peers) != 0 {
 		t.Errorf("alice sees %+v", st.Peers)
 	}
-	if nw := env.srv.Snapshot().Networks[0]; len(nw.Devices) != 1 {
-		t.Errorf("coordinator devices = %+v", nw.Devices)
+	if st := m.Status(); len(st.Peers) != 0 || st.Network != "lan" {
+		t.Errorf("mallory's status = %+v", st)
+	}
+	if snap := env.srv.Snapshot(); len(snap.Networks) != 2 {
+		t.Errorf("coordinator networks = %+v", snap.Networks)
+	}
+}
+
+func TestBadInvite(t *testing.T) {
+	e := New(Config{Server: "127.0.0.1:1", Invite: "blur-AAAA-BBBB-CCCC", Name: "x", DeviceID: "d"},
+		&fakeHost{pkts: make(chan []byte, 1)}, log.New(&logBuf{}, "", 0))
+	if err := e.Run(context.Background()); err == nil {
+		t.Fatal("Run accepted a bad invite")
+	}
+	if st := e.Status(); st.State != StateError || !strings.Contains(st.Message, "invite code") {
+		t.Errorf("status = %+v", st)
 	}
 }
 
@@ -639,7 +661,7 @@ func TestReconnect(t *testing.T) {
 
 	// Kicked: bob reconnects by himself and gets his (freed) address back.
 	t0 := time.Now().UTC()
-	if err := env.srv.RemoveDevice("lan", "dev-bob"); err != nil {
+	if err := env.srv.RemoveDevice(a.keys.NetworkID, "dev-bob"); err != nil {
 		t.Fatal(err)
 	}
 	connectedAfter(t0, "dev-bob")
@@ -651,7 +673,7 @@ func TestReconnect(t *testing.T) {
 
 	// Network deleted: both reconnect and recreate it, maybe with swapped addresses.
 	t0 = time.Now().UTC()
-	if err := env.srv.DeleteNetwork("lan"); err != nil {
+	if err := env.srv.DeleteNetwork(a.keys.NetworkID); err != nil {
 		t.Fatal(err)
 	}
 	connectedAfter(t0, "dev-alice", "dev-bob")

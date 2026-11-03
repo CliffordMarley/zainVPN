@@ -127,8 +127,8 @@ func startHTTP(cfg config, srv *server.Server, controlPort int, logger *log.Logg
 		what = "health check on http://%s/healthz"
 	} else {
 		d := dashboard.New(srv, cfg.adminPassword, version, controlPort, logger)
-		// The installer lives next to the state file (the Docker data volume).
-		d.EnableInstaller(filepath.Join(filepath.Dir(cfg.state), "zainVPN-Setup.exe"), os.Getenv("ZAINVPN_DOWNLOAD_CODE"))
+		// Uploads live next to the state file (the Docker data volume); the image also bundles one.
+		d.EnableInstaller(filepath.Join(filepath.Dir(cfg.state), "zainVPN-Setup.exe"), os.Getenv("ZAINVPN_BUNDLED_INSTALLER"), os.Getenv("ZAINVPN_DOWNLOAD_CODE"))
 		h = d
 	}
 

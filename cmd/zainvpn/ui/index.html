@@ -124,7 +124,7 @@ h1, h2, p, ol, dl, dd { margin: 0; }
 .nav-version { color: #b6bec9; font-size: 12px; }
 
 /* Page */
-main { max-width: 1280px; margin: 0 auto; padding: 16px 40px 32px; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 40px 32px; }
 .breadcrumbs ol { list-style: none; padding: 0; display: flex; flex-wrap: wrap; font-size: 12px; line-height: 16px; }
 .breadcrumbs li { display: flex; align-items: center; color: var(--text-2); }
 .breadcrumbs li + li::before {
@@ -132,7 +132,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 16px 40px 32px; }
   border-right: 1.5px solid var(--text-2); border-top: 1.5px solid var(--text-2); transform: rotate(45deg);
 }
 .breadcrumbs a { color: var(--link); }
-.page-header { margin: 12px 0 20px; }
+.page-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px 16px; margin: 8px 0 20px; }
 h1 { font-size: 24px; line-height: 30px; font-weight: 700; }
 .page-header p { margin-top: 4px; color: var(--text-2); }
 footer { text-align: center; color: var(--text-2); font-size: 12px; line-height: 16px; padding: 4px 0 24px; }
@@ -144,12 +144,14 @@ footer { text-align: center; color: var(--text-2); font-size: 12px; line-height:
 .container-header .desc, .summary-desc { display: block; margin-top: 4px; color: var(--text-2); font-weight: 400; font-size: 14px; line-height: 20px; }
 .counter { color: var(--text-2); font-weight: 400; }
 .container-body { padding: 0 20px 20px; }
-.grid-2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; margin-bottom: 20px; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; margin-bottom: 20px; }
 .grid-2 > .container { margin-bottom: 0; }
 .grid-even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.invite-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.invite-code { font-family: var(--mono); font-size: 20px; line-height: 28px; font-weight: 700; letter-spacing: .5px; padding: 8px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); overflow-wrap: anywhere; user-select: all; }
-.net-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.invite-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.invite-code { font-family: var(--mono); font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: .5px; padding: 4px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); overflow-wrap: anywhere; user-select: all; }
+.grid-2 > .container { display: flex; flex-direction: column; }
+.grid-2 > .container > .container-body { flex: 1; display: flex; flex-direction: column; }
+.grid-2 .form-actions { margin-top: auto; padding-top: 4px; }
 
 /* Key-value overview */
 .kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -331,12 +333,12 @@ dialog.modal::backdrop { background: var(--overlay); }
 </header>
 
 <main id="main">
-  <nav class="breadcrumbs" aria-label="Breadcrumbs">
-    <ol><li><a href="/">zainVPN</a></li><li><span aria-current="page">Dashboard</span></li></ol>
-  </nav>
   <div class="page-header">
-    <h1>Dashboard</h1>
-    <p>Your virtual LAN for playing games with friends over the internet.</p>
+    <div>
+      <h1 id="page-title">zainVPN</h1>
+      <p id="page-desc">Your virtual LAN for playing games with friends over the internet.</p>
+    </div>
+    <button type="button" class="btn" id="leave-btn" hidden>Leave network</button>
   </div>
 
   <div id="banner" class="alert alert-error page-alert" role="alert" hidden>
@@ -382,14 +384,13 @@ dialog.modal::backdrop { background: var(--overlay); }
 
   <section class="container" id="net-box" aria-labelledby="net-title" hidden>
     <div class="container-header">
-      <div><h2 id="net-title">Network <span id="net-name"></span></h2><span class="desc">Send this code to friends so they can join. Anyone with it can join this network.</span></div>
+      <div><h2 id="net-title">Invite friends</h2><span class="desc">Send friends this code so they can join. Anyone with it can join, so share it only with your group.</span></div>
     </div>
     <div class="container-body">
-      <div class="invite-row copy-wrap">
+      <div class="invite-row">
         <code class="invite-code" id="v-invite">—</code>
-        <button type="button" class="btn" id="copy-invite">Copy invite code</button>
+        <span class="copy-wrap"><button type="button" class="btn btn-primary" id="copy-invite">Copy invite code</button></span>
       </div>
-      <div class="net-actions"><button type="button" class="btn" id="leave-btn">Leave network</button></div>
     </div>
   </section>
 
@@ -408,12 +409,12 @@ dialog.modal::backdrop { background: var(--overlay); }
           </dd></div>
         </dl>
         <dl class="kv-col">
-          <div><dt>Network</dt><dd id="v-network">—</dd></div>
-          <div><dt>Coordinator</dt><dd id="v-server">—</dd></div>
-        </dl>
-        <dl class="kv-col">
           <div><dt>Connection</dt><dd aria-live="polite"><span id="v-conn" class="status"></span><div id="v-conn-msg" class="secondary small" hidden></div></dd></div>
           <div><dt>Relay</dt><dd><span id="v-relay" class="status"></span><div id="v-relay-msg" class="secondary small" hidden></div></dd></div>
+        </dl>
+        <dl class="kv-col">
+          <div><dt>Coordinator</dt><dd id="v-server">—</dd></div>
+          <div><dt>Players online</dt><dd id="v-online">—</dd></div>
         </dl>
       </div>
     </div>
@@ -631,7 +632,6 @@ dialog.modal::backdrop { background: var(--overlay); }
     setText($('v-name'), st.name || '—');
     setText($('v-ip'), st.ip || '—');
     $('copy-ip').hidden = !st.ip;
-    setText($('v-network'), st.network || '—');
     setText($('v-server'), st.server || '—');
     setStatus($('v-conn'), type, label);
     const msg = $('v-conn-msg');
@@ -929,8 +929,14 @@ dialog.modal::backdrop { background: var(--overlay); }
     setText($('footer'), 'zainVPN ' + d.version);
     const inNet = st.state !== 'setup';
     $('setup').hidden = inNet;
-    $('net-box').hidden = $('pc-box').hidden = $('players-box').hidden = !inNet;
-    setText($('net-name'), st.network ? `“${st.network}”` : '');
+    $('net-box').hidden = $('pc-box').hidden = $('players-box').hidden = $('leave-btn').hidden = !inNet;
+    const peers = st.peers || [];
+    const online = peers.filter((p) => p.online).length;
+    setText($('page-title'), inNet ? (st.network || 'Network') : 'Get started');
+    setText($('page-desc'), inNet
+      ? `${online} of ${peers.length} ${peers.length === 1 ? 'friend' : 'friends'} online. Start your game and choose LAN.`
+      : 'Create a network for your group, or join one with an invite code from a friend.');
+    setText($('v-online'), inNet ? `${online} of ${peers.length}` : '—');
     setText($('v-invite'), st.invite || '—');
     $('copy-invite').disabled = !st.invite;
     renderPC(st, type, label);

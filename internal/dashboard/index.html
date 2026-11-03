@@ -181,13 +181,18 @@ svg { flex: none; }
 /* Key-value overview */
 .kv-wrap { container-type: inline-size; }
 .kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.kv.kv-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container (max-width: 860px) {
+  .kv.kv-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
+  .kv.kv-4 .kv-col:nth-child(3) { padding-left: 0; border-left: 0; }
+}
 .kv-col { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0 20px; border-left: 1px solid var(--divider); }
 .kv-col:first-child { padding-left: 0; border-left: 0; }
 .kv-col:last-child { padding-right: 0; }
 .kv dt { margin-bottom: 2px; color: var(--text-2); font-weight: 700; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 @container (max-width: 600px) {
-  .kv { grid-template-columns: 1fr; row-gap: 16px; }
+  .kv, .kv.kv-4 { grid-template-columns: 1fr; row-gap: 16px; }
   .kv-col { padding: 0; border-left: 0; }
 }
 
@@ -224,6 +229,7 @@ td.cell-mid { vertical-align: middle; }
 /* Connect a device */
 .field-label { margin-bottom: 4px; font-weight: 700; }
 .field-desc { margin-top: 4px; color: var(--text-2); }
+.installer-note { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--divider); }
 .copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .addr { padding: 5px 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); font-size: 14px; font-weight: 700; line-height: 20px; overflow-wrap: anywhere; }
 .steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
@@ -403,7 +409,7 @@ function pageHeader({ crumbs, title, desc, actions }) {
 function container({ title, counter, desc, actions, body }) {
   return `<section class="container"><div class="container-header"><div><h2>${esc(title)}${counter != null ? ` <span class="counter">(${num(counter)})</span>` : ''}</h2>${desc ? `<p>${desc}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div><div class="container-body">${body}</div></section>`;
 }
-const kv = cols => `<div class="kv-wrap"><div class="kv">${cols.map(col => `<dl class="kv-col">${col.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`).join('')}</div></div>`;
+const kv = cols => `<div class="kv-wrap"><div class="kv${cols.length === 4 ? ' kv-4' : ''}">${cols.map(col => `<dl class="kv-col">${col.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`).join('')}</div></div>`;
 function alertBox(type, title, html, dismissId) {
   const close = dismissId != null ? `<button type="button" class="icon-btn" data-action="dismiss" data-id="${dismissId}" aria-label="Dismiss">${ICON.close}</button>` : '';
   return `<div class="alert alert-${type}"${dismissId != null ? ` data-key="flash-${dismissId}"` : ''}>${ICON[type]}<div class="alert-body">${title ? `<span class="alert-title">${esc(title)}</span>` : ''}${html}</div>${close}</div>`;
@@ -427,19 +433,19 @@ function viewDashboard(s) {
   if (s) {
     const t = totals(s.networks);
     cols = [
-      [['Status', status], ['Uptime', esc(duration(serverNow() - ms(s.started)))], ['Version', esc(s.version)]],
+      [['Status', status], ['Version', esc(s.version)]],
+      [['Uptime', esc(duration(serverNow() - ms(s.started)))], ['Started', `<time datetime="${esc(s.started)}">${esc(absTime(s.started))}</time>`]],
       [['Networks', `<a class="link-plain" href="#/networks">${num(s.networks.length)}</a>`], ['Devices online / total', `${num(t.online)} / ${num(t.total)}`]],
-      [['Relayed traffic', `${plural(s.relayPackets, 'packet', 'packets')} (${esc(bytes(s.relayBytes))})<span class="sub">Forwarded for peers that couldn't connect directly</span>`], ['Started', `<time datetime="${esc(s.started)}">${esc(absTime(s.started))}</time>`]],
+      [['Relayed traffic', `${esc(bytes(s.relayBytes))}<span class="sub">${plural(s.relayPackets, 'packet', 'packets')} for peers that couldn't connect directly</span>`]],
     ];
   } else {
-    cols = [[['Status', status], ['Uptime', dash], ['Version', dash]], [['Networks', dash], ['Devices online / total', dash]], [['Relayed traffic', dash], ['Started', dash]]];
+    cols = [[['Status', status], ['Version', dash]], [['Uptime', dash], ['Started', dash]], [['Networks', dash], ['Devices online / total', dash]], [['Relayed traffic', dash]]];
   }
 
   const port = s ? s.controlPort : 29814;
   const addr = `${location.hostname}:${port}`;
   const local = /^(localhost|127\.|\[::1\]$)/.test(location.hostname);
   const dashPort = location.port || (location.protocol === 'https:' ? '443' : '80');
-  const cmd = `.\\build.ps1 -Server ${addr} -Publish`;
   const link = `${location.origin}/`;
   const connect = `
 <div class="field-label" id="addr-label">Coordinator address</div>
@@ -448,16 +454,13 @@ function viewDashboard(s) {
 ${local ? alertBox('warning', 'You opened this page through localhost', `<p>Friends can't use <code>${esc(addr)}</code>. Replace it with the server's public IP or DNS name.</p>`) : ''}
 <h3>Add friends in 3 steps</h3>
 <ol class="steps">
-  <li><b>Build the Windows installer and publish it here</b>, from the zainVPN folder on your PC:
-    <div class="cmd-row"><pre class="cmd"><code>${esc(cmd)}</code></pre>${copyButton('cmd', cmd, 'Copy build command')}</div>
-    <p>Usually not needed: <code>bash deploy.sh</code> builds the installer on the server with this address built in. Use this only to publish a build from your PC (it asks for the admin password), or upload <code>dist\\zainVPN-Setup.exe</code> under Installer above.</p></li>
-  <li><b>Send your friends this link:</b>
+  <li><b>Send your friends the download link</b>
     <div class="copy-row"><code class="addr">${esc(link)}</code>${copyButton('link', link, 'Copy download link')}</div>
-    <p>They download zainVPN from the sign-in page${s && s.downloadCode ? ' with the download code (<code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code>)' : ''}. The installer only contains this server's address.</p></li>
-  <li><b>Create a network in your zainVPN app and share the invite code.</b>
-    <p>Open zainVPN, click <b>Create network</b>, and send friends the code (like <code>blur-7K3M-9X2Q-8W4T</code>). They paste it under <b>Join network</b>. The code is what keeps a network private, so share it only with your group.</p></li>
-  <li><b>They install it and pick a nickname.</b>
-    <p>zainVPN then runs in the background and starts with Windows. Their PC appears under <a href="#/networks">Networks</a>.</p></li>
+    <p>They download zainVPN from the sign-in page${s && s.downloadCode ? ' with the download code (<code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code>)' : ''}. The installer only contains this server's address, so it's safe to share.</p></li>
+  <li><b>Create a network in your zainVPN app</b>
+    <p>Open zainVPN, click <b>Create network</b>, and send friends the invite code it shows (like <code>blur-7K3M-9X2Q-8W4T</code>). The code is what keeps a network private.</p></li>
+  <li><b>Friends install zainVPN and paste the code</b>
+    <p>Under <b>Join network</b>. zainVPN then runs in the background and starts with Windows. Their PC appears under <a href="#/networks">Networks</a>.</p></li>
 </ol>
 ${alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> and <b>TCP ${esc(dashPort)}</b> (this page, for downloads) from anywhere. Admin pages still need the password.</p>`)}
 `;
@@ -473,11 +476,13 @@ function viewInstaller(s) {
   let body;
   if (!s) body = loading();
   else if (!s.downloads) body = '<p>Installer downloads are disabled on this coordinator.</p>';
-  else if (!inst) body = `<div class="empty"><b>No installer uploaded yet</b>Run <code>build.ps1 -Publish</code>, or upload <code>dist\\zainVPN-Setup.exe</code> here.</div>`;
+  else if (!inst) body = `<div class="empty"><b>No installer yet</b>Run <code>bash deploy.sh</code> on the server to build one, or upload <code>zainVPN-Setup.exe</code> here.</div>`;
   else body = kv([
-    [['File', 'zainVPN-Setup.exe'], ['Size', esc(bytes(inst.size))]],
-    [['Uploaded', timeEl(inst.uploaded)], ['Download code', s.downloadCode ? si('success', 'Required') : si('stopped', 'Not required')]],
-  ]);
+    [['File', 'zainVPN-Setup.exe']],
+    [['Size', esc(bytes(inst.size))]],
+    [['Updated', timeEl(inst.uploaded)]],
+    [['Download code', s.downloadCode ? si('success', 'Required') : si('stopped', 'Not required')]],
+  ]) + `<p class="field-desc installer-note">Every <code>bash deploy.sh</code> builds a fresh installer with this server's address. To test a local build instead, run <code>.\\build.ps1 -Server ${esc(location.hostname)} -Publish</code> on your PC or upload it with Replace.</p>`;
   let actions = '';
   if (s && s.downloads) {
     const busy = state.uploading;
@@ -524,7 +529,8 @@ function viewNetwork(s, name) {
   const details = kv([
     [['Devices online / total', `${si(online ? 'success' : 'stopped', `${num(online)} / ${num(devs.length)}`)}`]],
     [['Created', `${timeEl(n.created)}<span class="sub">${esc(absTime(n.created))}</span>`]],
-    [['Subnet', '<span class="mono">10.77.0.0/24</span>'], ['Relayed now', `${esc(bytes(relayed))}<span class="sub">By devices that are online</span>`]],
+    [['Subnet', '<span class="mono">10.77.0.0/24</span>']],
+    [['Relayed now', `${esc(bytes(relayed))}<span class="sub">By devices that are online</span>`]],
   ]);
 
   let body;

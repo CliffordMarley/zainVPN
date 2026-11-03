@@ -53,6 +53,7 @@ main { display: flex; justify-content: center; padding: 64px 16px 32px; }
 h1, h2 { margin: 0; font-size: 18px; line-height: 22px; }
 .container + .container { margin-top: 20px; }
 .meta { text-align: center; }
+.dl > button:first-child { margin-top: 4px; }
 .steps { margin: 16px 0 0; padding-left: 20px; color: var(--text-2); }
 .steps li + li { margin-top: 4px; }
 .container-header p { margin: 4px 0 0; color: var(--text-2); }
@@ -84,7 +85,7 @@ button:hover { border-color: var(--primary-hover); background: var(--primary-hov
         <h2 id="dl-title">Join the game</h2>
         <p>Install zainVPN on your Windows PC to join your friends' virtual LAN.</p>
       </div>
-      <form method="get" action="/download">
+      <form method="get" action="/download" class="dl">
         {{if .DownloadError}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.DownloadError}}</div></div>{{end}}
         {{if .NeedCode}}
         <label for="code">Download code</label>

@@ -56,6 +56,8 @@ On the first run it creates `.env` with a random admin password and prints it. T
    - Friends: paste the code under **Join network**.
 4. In Blur, choose LAN. Games hosted by friends appear automatically. If a game asks for an IP address, use the host's virtual IP (10.77.0.x) from the Players list.
 
+**Shared files.** Each network has a shared folder in the app. Anyone in the network can upload files, and everyone else in it can download them, even if the uploader is offline. Files and their names are encrypted on your PC with the network's invite-code key before upload, so the coordinator only stores scrambled data. Only the uploader can delete a file, and deleting a network on the dashboard deletes its files. Defaults: up to 2 GB per file and 10 GB per network. Change them with `ZAINVPN_SHARE_*` in `.env`. Keep an eye on disk space and AWS data-transfer costs.
+
 ## Troubleshooting
 
 - **The installer or zainVPN is blocked with "An Application Control policy has blocked this file".** Smart App Control is on for that PC, and it blocks unsigned programs. Turn it off in *Windows Security → App & browser control → Smart App Control*. The permanent fix is to code-sign the exes.

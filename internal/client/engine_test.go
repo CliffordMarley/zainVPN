@@ -99,7 +99,10 @@ type testEnv struct {
 	invites map[string]string // see inviteFor
 }
 
-func newEnv(t *testing.T) *testEnv {
+func newEnv(t *testing.T) *testEnv { return newEnvWith(t, nil) }
+
+// newEnvWith lets setup configure the coordinator before it starts serving.
+func newEnvWith(t *testing.T, setup func(*server.Server, *log.Logger)) *testEnv {
 	t.Helper()
 	logs := &logBuf{}
 	t.Cleanup(func() {
@@ -107,9 +110,13 @@ func newEnv(t *testing.T) *testEnv {
 			t.Logf("logs:\n%s", logs)
 		}
 	})
-	srv, err := server.New("", log.New(logs, "server: ", log.Lmicroseconds))
+	logger := log.New(logs, "server: ", log.Lmicroseconds)
+	srv, err := server.New("", logger)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if setup != nil {
+		setup(srv, logger)
 	}
 	ln, udp := listenPair(t)
 	done := make(chan struct{})

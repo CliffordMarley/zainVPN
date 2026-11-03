@@ -149,6 +149,19 @@ footer { text-align: center; color: var(--text-2); font-size: 12px; line-height:
 .grid-even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .invite-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .invite-tip { margin-top: auto; padding-top: 16px; overflow-wrap: anywhere; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+#files-box .container-header { flex-wrap: nowrap; }
+#files-box .container-header > div:first-child { flex: 1; min-width: 0; }
+.btn.btn-sm { min-height: 28px; padding: 2px 14px; font-size: 13px; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.row-actions .slot { width: 62px; }
+.upload-row { display: grid; grid-template-columns: minmax(0, 1fr) 180px 64px; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--divider); }
+.up-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 8px; border-radius: 4px; background: var(--divider); overflow: hidden; }
+.fill { height: 100%; width: 0; background: var(--link); transition: width .2s; }
+.up-pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 12px; }
+#files-usage { margin-top: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 #net-row .kv-col { padding: 0 14px; }
 #net-row .kv-col:first-child { padding-left: 0; }
 .invite-code { font-family: var(--mono); font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: .5px; padding: 4px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); overflow-wrap: anywhere; user-select: all; }
@@ -444,6 +457,31 @@ dialog.modal::backdrop { background: var(--overlay); }
         <b>No one else is here yet</b>
         <p>Send your friends the invite code above. They'll show up here once they join.</p>
       </div>
+    </div>
+  </section>
+
+  <section class="container" id="files-box" aria-labelledby="files-title" hidden>
+    <div class="container-header">
+      <div>
+        <h2 id="files-title">Shared files <span class="counter" id="files-count"></span></h2>
+        <span class="desc">A folder everyone in this network can use. Files are encrypted on your PC before they're uploaded, so only people with the invite code can open them.</span>
+      </div>
+      <div class="header-actions"><button type="button" class="btn btn-primary" id="upload-btn" disabled>Upload files</button></div>
+    </div>
+    <div class="container-body">
+      <input type="file" id="upload-input" multiple hidden>
+      <div id="uploads" aria-live="polite"></div>
+      <div class="table-wrap" id="files-table" role="region" aria-labelledby="files-title" tabindex="0" hidden>
+        <table>
+          <thead><tr><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Shared by</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="file-rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="files-empty" hidden>
+        <b>No files yet</b>
+        <p>Upload a file to share it with everyone in this network.</p>
+      </div>
+      <p class="secondary small" id="files-usage"></p>
     </div>
   </section>
 
@@ -899,6 +937,125 @@ dialog.modal::backdrop { background: var(--overlay); }
     }
   }
 
+  // ---- Shared files ----
+  let filesAt = 0, filesLoading = false, filesJSON = '', maxFile = 0;
+  const fmtBytes = (n) => n < 1024 ? `${n} B` : n < 1 << 20 ? `${Math.round(n / 1024)} KB`
+    : n < 1 << 30 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${(n / (1 << 30)).toFixed(2)} GB`;
+  const fmtAgo = (iso) => {
+    const s = (Date.now() - Date.parse(iso)) / 1000;
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+    return new Date(iso).toLocaleDateString();
+  };
+
+  async function loadFiles(force) {
+    if (filesLoading) return;
+    filesLoading = true;
+    filesAt = Date.now();
+    try {
+      const d = await api('/api/share');
+      const j = JSON.stringify(d);
+      if (force || j !== filesJSON) { filesJSON = j; renderFiles(d); }
+    } catch (e) { /* the status banner already says so */ } finally {
+      filesLoading = false;
+    }
+  }
+
+  function renderFiles(d) {
+    const files = d.files || [];
+    maxFile = d.maxFile || 0;
+    $('upload-btn').disabled = !d.available;
+    setText($('files-count'), d.available ? `(${files.length})` : '');
+    $('files-empty').hidden = !d.available || files.length > 0;
+    $('files-table').hidden = !d.available || files.length === 0;
+    setText($('files-usage'), d.available
+      ? `${fmtBytes(d.used)} of ${fmtBytes(d.quota)} used · files up to ${fmtBytes(maxFile)} each`
+      : (d.message || 'Shared files are available once you are connected.'));
+    $('file-rows').replaceChildren(...files.map((f) => {
+      const tr = el('tr');
+      const name = el('td', 'name', f.name);
+      name.title = f.name;
+      tr.append(name, el('td', 'num', fmtBytes(f.size)), el('td', '', f.mine ? 'You' : f.by), el('td', '', fmtAgo(f.uploaded)));
+      const act = el('td');
+      const wrap = el('div', 'row-actions');
+      const dl = el('a', 'btn btn-sm', 'Download');
+      dl.href = '/api/share/files/' + encodeURIComponent(f.id);
+      dl.setAttribute('download', f.name);
+      dl.setAttribute('aria-label', 'Download ' + f.name);
+      wrap.append(dl);
+      if (f.mine) {
+        const del = el('button', 'btn btn-sm btn-link slot', 'Delete');
+        del.type = 'button';
+        del.setAttribute('aria-label', 'Delete ' + f.name);
+        del.addEventListener('click', () => deleteFile(f));
+        wrap.append(del);
+      } else {
+        wrap.append(el('span', 'slot'));
+      }
+      act.append(wrap);
+      tr.append(act);
+      return tr;
+    }));
+  }
+
+  $('upload-btn').addEventListener('click', () => $('upload-input').click());
+  $('upload-input').addEventListener('change', (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    files.forEach(uploadFile);
+  });
+
+  function uploadFile(file) {
+    if (maxFile && file.size > maxFile) {
+      flash(makeAlert('error', `${file.name} is too big`, `This server accepts files up to ${fmtBytes(maxFile)}.`, true));
+      return;
+    }
+    const fill = el('div', 'fill'), bar = el('div', 'bar'), pct = el('span', 'up-pct', '0%');
+    bar.append(fill);
+    const row = el('div', 'upload-row');
+    row.append(el('span', 'up-name', `Uploading ${file.name}`), bar, pct);
+    $('uploads').append(row);
+    const done = (ok, msg) => {
+      row.remove();
+      flash(ok ? makeAlert('success', 'Uploaded', `${file.name} is in the shared folder.`, true)
+        : makeAlert('error', `Couldn't upload ${file.name}`, msg, true));
+      loadFiles(true);
+    };
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/share/upload?name=' + encodeURIComponent(file.name));
+    xhr.setRequestHeader('X-ZainVPN', '1');
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.addEventListener('progress', (e) => {
+      if (!e.lengthComputable) return;
+      const p = Math.floor((e.loaded / e.total) * 100);
+      fill.style.width = p + '%';
+      pct.textContent = p < 100 ? p + '%' : 'Finishing';
+    });
+    xhr.addEventListener('load', () => {
+      let msg = 'Upload failed.';
+      try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) { /* not JSON */ }
+      done(xhr.status === 200, msg);
+    });
+    xhr.addEventListener('error', () => done(false, "Can't reach the zainVPN service."));
+    xhr.send(file);
+  }
+
+  async function deleteFile(f) {
+    const ok = await confirmDialog('Delete file?', `${f.name} will be removed from the shared folder for everyone in this network.`, 'Delete');
+    if (!ok) return;
+    try {
+      await api('/api/share/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-ZainVPN': '1' },
+        body: JSON.stringify({ id: f.id }),
+      });
+      loadFiles(true);
+    } catch (err) {
+      flash(makeAlert('error', "Couldn't delete the file", err.message, true));
+    }
+  }
+
   // ---- Confirmation modal ----
   const dlg = $('confirm');
   function confirmDialog(title, body, okLabel) {
@@ -935,7 +1092,8 @@ dialog.modal::backdrop { background: var(--overlay); }
     setText($('footer'), 'zainVPN ' + d.version);
     const inNet = st.state !== 'setup';
     $('setup').hidden = inNet;
-    $('net-row').hidden = $('players-box').hidden = $('leave-btn').hidden = !inNet;
+    $('net-row').hidden = $('players-box').hidden = $('files-box').hidden = $('leave-btn').hidden = !inNet;
+    if (inNet && Date.now() - filesAt > 10000) loadFiles();
     const host = (st.server || '').replace(/:\d+$/, '');
     setText($('v-download'), host ? `http://${host}:21958/` : '—');
     const peers = st.peers || [];

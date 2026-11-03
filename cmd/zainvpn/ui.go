@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"mime"
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +37,16 @@ type backend interface {
 	// fails, nothing changes and its error is returned as is.
 	Update(fn func(*client.Config) error) error
 	Logs() []string
+	// Share is the current network's shared folder, while connected.
+	Share() (shareAPI, error)
+}
+
+// shareAPI is the shared folder (*client.Share, or the demo's).
+type shareAPI interface {
+	List(ctx context.Context) (client.ShareListing, error)
+	Upload(ctx context.Context, name string, size int64, r io.Reader) error
+	Download(ctx context.Context, id string) (name string, size int64, write func(io.Writer) error, err error)
+	Delete(ctx context.Context, id string) error
 }
 
 type publicConfig struct {
@@ -170,7 +182,108 @@ func newUIServer(b backend, logger *log.Logger) *http.Server {
 		}
 		writeJSON(w, http.StatusOK, resp)
 	})
+	addShareRoutes(mux, b)
 	return &http.Server{Handler: guard(mux), ReadHeaderTimeout: 10 * time.Second, ErrorLog: logger}
+}
+
+// addShareRoutes serves the shared folder to the UI. The service encrypts
+// uploads and decrypts downloads; the coordinator only sees ciphertext.
+func addShareRoutes(mux *http.ServeMux, b backend) {
+	mux.HandleFunc("GET /api/share", func(w http.ResponseWriter, r *http.Request) {
+		type resp struct {
+			Available bool   `json:"available"`
+			Message   string `json:"message,omitempty"`
+			client.ShareListing
+		}
+		s, err := b.Share()
+		if err != nil {
+			writeJSON(w, http.StatusOK, resp{Message: sentence(err), ShareListing: client.ShareListing{Files: []client.SharedFile{}}})
+			return
+		}
+		l, err := s.List(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusOK, resp{Message: sentence(err), ShareListing: client.ShareListing{Files: []client.SharedFile{}}})
+			return
+		}
+		writeJSON(w, http.StatusOK, resp{Available: true, ShareListing: l})
+	})
+	mux.HandleFunc("POST /api/share/upload", func(w http.ResponseWriter, r *http.Request) {
+		name := fileBase(r.URL.Query().Get("name"))
+		switch {
+		case name == "":
+			writeError(w, http.StatusBadRequest, "Choose a file to upload.")
+			return
+		case r.ContentLength < 0:
+			writeError(w, http.StatusLengthRequired, "The file size is missing.")
+			return
+		}
+		s, err := b.Share()
+		if err == nil {
+			err = s.Upload(r.Context(), name, r.ContentLength, r.Body)
+		}
+		if err != nil {
+			writeError(w, http.StatusBadGateway, sentence(err))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"name": name})
+	})
+	mux.HandleFunc("GET /api/share/files/{id}", func(w http.ResponseWriter, r *http.Request) {
+		s, err := b.Share()
+		var name string
+		var size int64
+		var write func(io.Writer) error
+		if err == nil {
+			name, size, write, err = s.Download(r.Context(), r.PathValue("id"))
+		}
+		if err != nil {
+			http.Error(w, sentence(err), http.StatusBadGateway)
+			return
+		}
+		h := w.Header()
+		h.Set("Content-Type", "application/octet-stream")
+		h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+		if size > 0 {
+			h.Set("Content-Length", strconv.FormatInt(size, 10))
+		}
+		if err := write(w); err != nil {
+			// Headers are gone; aborting makes the browser report a failed download.
+			panic(http.ErrAbortHandler)
+		}
+	})
+	mux.HandleFunc("POST /api/share/delete", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID string `json:"id"`
+		}
+		if !readJSON(w, r, &req) {
+			return
+		}
+		s, err := b.Share()
+		if err == nil {
+			err = s.Delete(r.Context(), req.ID)
+		}
+		if err != nil {
+			writeError(w, http.StatusBadGateway, sentence(err))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	})
+}
+
+// fileBase keeps only the file name from a path someone typed or uploaded.
+func fileBase(name string) string {
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	name = strings.Map(func(r rune) rune {
+		if r < 0x20 || strings.ContainsRune(`<>:"|?*`, r) {
+			return -1
+		}
+		return r
+	}, strings.TrimSpace(name))
+	if len(name) > 200 {
+		name = name[:200]
+	}
+	return strings.Trim(name, ". ")
 }
 
 // isLabelChar reports whether network names keep r (see proto.CleanLabel).
@@ -207,8 +320,10 @@ func guard(next http.Handler) http.Handler {
 			return
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			// Uploads send raw bytes; octet-stream also forces a preflight.
 			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if r.Header.Get("X-ZainVPN") != "1" || mt != "application/json" {
+			upload := r.URL.Path == "/api/share/upload" && mt == "application/octet-stream"
+			if r.Header.Get("X-ZainVPN") != "1" || (mt != "application/json" && !upload) {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
@@ -314,6 +429,81 @@ type demo struct {
 	t0      time.Time
 	changed time.Time
 	empty   bool
+	files   []demoFile
+}
+
+type demoFile struct {
+	client.SharedFile
+	data []byte
+}
+
+// Share is an in-memory shared folder, seeded with a file from a friend.
+func (d *demo) Share() (shareAPI, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if _, err := proto.ParseInvite(d.cfg.Invite); err != nil {
+		return nil, client.ErrShareUnavailable
+	}
+	if d.files == nil {
+		d.files = []demoFile{{SharedFile: client.SharedFile{
+			ID: "0001", Name: "Blur LAN tips.txt", Size: 46, By: "Zain", Uploaded: time.Now().Add(-time.Hour),
+		}, data: []byte("Host picks the track, everyone else joins LAN.")}}
+	}
+	return demoShare{d}, nil
+}
+
+type demoShare struct{ d *demo }
+
+func (s demoShare) List(ctx context.Context) (client.ShareListing, error) {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+	l := client.ShareListing{Files: []client.SharedFile{}, Quota: 10 << 30, MaxFile: 2 << 30}
+	for i := len(s.d.files) - 1; i >= 0; i-- {
+		l.Files = append(l.Files, s.d.files[i].SharedFile)
+		l.Used += s.d.files[i].Size
+	}
+	return l, nil
+}
+
+func (s demoShare) Upload(ctx context.Context, name string, size int64, r io.Reader) error {
+	data, err := io.ReadAll(io.LimitReader(r, min(size, 64<<20)))
+	if err != nil {
+		return err
+	}
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+	id := fmt.Sprintf("%04d", len(s.d.files)+1)
+	s.d.files = append(s.d.files, demoFile{client.SharedFile{
+		ID: id, Name: name, Size: size, By: s.d.cfg.Name, Mine: true, Uploaded: time.Now(),
+	}, data})
+	return nil
+}
+
+func (s demoShare) Download(ctx context.Context, id string) (string, int64, func(io.Writer) error, error) {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+	for _, f := range s.d.files {
+		if f.ID == id {
+			data := f.data
+			return f.Name, int64(len(data)), func(w io.Writer) error { _, err := w.Write(data); return err }, nil
+		}
+	}
+	return "", 0, nil, errors.New("file not found")
+}
+
+func (s demoShare) Delete(ctx context.Context, id string) error {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+	for i, f := range s.d.files {
+		if f.ID == id {
+			if !f.Mine {
+				return errors.New("only " + f.By + " can delete this file")
+			}
+			s.d.files = append(s.d.files[:i], s.d.files[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("file not found")
 }
 
 func (d *demo) Status() client.Status {

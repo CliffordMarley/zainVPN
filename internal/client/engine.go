@@ -71,6 +71,7 @@ type Engine struct {
 	ip        netip.Addr
 	session   [proto.SessionLen]byte
 	hasSess   bool
+	sharePort int // coordinator's shared-files HTTP port, from the welcome
 	serverUDP netip.AddrPort
 	lastReg   time.Time
 	lastAck   time.Time
@@ -496,6 +497,7 @@ func (e *Engine) welcome(m *proto.Msg, srv netip.AddrPort) error {
 	e.mu.Lock()
 	e.ip = ip
 	e.session = [proto.SessionLen]byte(sess)
+	e.sharePort = m.SharePort
 	e.hasSess = true
 	e.serverUDP = srv
 	e.lastReg, e.lastAck = time.Time{}, time.Time{}

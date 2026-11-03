@@ -270,8 +270,9 @@ type Msg struct {
 	Local   []string `json:"local,omitempty"` // client's UDP endpoints on its own LAN
 
 	// welcome
-	IP      string `json:"ip,omitempty"`
-	Session string `json:"session,omitempty"` // hex; proves identity in TypeRegister
+	IP        string `json:"ip,omitempty"`
+	Session   string `json:"session,omitempty"`   // hex; proves identity in TypeRegister and to the file service
+	SharePort int    `json:"sharePort,omitempty"` // HTTP port of the coordinator's shared files; 0 if off
 
 	// peers
 	Peers []PeerInfo `json:"peers,omitempty"`

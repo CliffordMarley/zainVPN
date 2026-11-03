@@ -48,6 +48,32 @@ type Server struct {
 
 	relayPackets atomic.Uint64
 	relayBytes   atomic.Uint64
+
+	// SharePort is told to clients as the shared-files HTTP port (0: off).
+	SharePort int
+	// OnNetworkDeleted, if set, is called after DeleteNetwork forgets a network.
+	OnNetworkDeleted func(network string)
+}
+
+// Member identifies an online device by its control session.
+type Member struct {
+	Network, Device, Name string
+}
+
+// MemberBySession finds the online device with the given hex session, as
+// sent in the welcome message. The file service uses it to authenticate.
+func (s *Server) MemberBySession(session string) (Member, bool) {
+	b, err := hex.DecodeString(session)
+	if err != nil || len(b) != proto.SessionLen {
+		return Member{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	m := s.sessions[[proto.SessionLen]byte(b)]
+	if m == nil {
+		return Member{}, false
+	}
+	return Member{Network: m.nw.Name, Device: m.id, Name: m.name}, true
 }
 
 type network struct {
@@ -158,7 +184,7 @@ func (s *Server) handleConn(c net.Conn) {
 	defer s.leave(m)
 
 	if err := s.send(m, &proto.Msg{
-		Type: proto.MsgWelcome, IP: m.ip.String(), Session: hex.EncodeToString(m.session[:]),
+		Type: proto.MsgWelcome, IP: m.ip.String(), Session: hex.EncodeToString(m.session[:]), SharePort: s.SharePort,
 	}); err != nil {
 		return
 	}
@@ -518,6 +544,9 @@ func (s *Server) DeleteNetwork(name string) error {
 		c.Close()
 	}
 	s.log.Printf("deleted network %q", nw.Name)
+	if s.OnNetworkDeleted != nil {
+		s.OnNetworkDeleted(nw.Name)
+	}
 	return nil
 }
 

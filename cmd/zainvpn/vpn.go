@@ -291,3 +291,15 @@ func (v *vpn) Update(fn func(*client.Config) error) error {
 }
 
 func (v *vpn) Logs() []string { return v.ring.Lines() }
+
+func (v *vpn) Share() (shareAPI, error) {
+	e := v.eng.Load()
+	if e == nil {
+		return nil, client.ErrShareUnavailable
+	}
+	s, err := e.Share()
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}

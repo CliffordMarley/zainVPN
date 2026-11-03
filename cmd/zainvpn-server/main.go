@@ -18,11 +18,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
 	"zainvpn/internal/dashboard"
 	"zainvpn/internal/server"
+	"zainvpn/internal/share"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -91,11 +93,12 @@ func run(cfg config, logger *log.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Before Serve: it sets srv.SharePort, which welcome messages carry.
+	hs := startHTTP(cfg, srv, port, logger)
+
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln, udp) }()
 	logger.Printf("zainVPN coordinator %s on %s (TCP control, UDP relay), state %s", version, ln.Addr(), cfg.state)
-
-	hs := startHTTP(cfg, srv, port, logger)
 
 	select {
 	case <-ctx.Done():
@@ -137,8 +140,18 @@ func startHTTP(cfg config, srv *server.Server, controlPort int, logger *log.Logg
 		logger.Printf("ERROR: dashboard: %v (the VPN coordinator keeps running)", err)
 		return nil
 	}
+	mux := http.NewServeMux()
+	mux.Handle("/", h)
+	if os.Getenv("ZAINVPN_SHARE") != "off" {
+		st := share.New(filepath.Join(filepath.Dir(cfg.state), "share"), srv,
+			envMB("ZAINVPN_SHARE_QUOTA_MB", 10240), envMB("ZAINVPN_SHARE_MAX_FILE_MB", 2048), logger)
+		srv.OnNetworkDeleted = st.RemoveNetwork
+		srv.SharePort = ln.Addr().(*net.TCPAddr).Port
+		mux.Handle("/share/", st.Handler())
+		logger.Printf("shared files on http://%s/share/", ln.Addr())
+	}
 	hs := &http.Server{
-		Handler:           h,
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -165,6 +178,14 @@ func healthOnly() http.Handler {
 		http.Error(w, "The zainVPN dashboard is disabled: set ZAINVPN_ADMIN_PASSWORD and restart the coordinator.", http.StatusServiceUnavailable)
 	})
 	return mux
+}
+
+// envMB reads a size in megabytes from the environment, in bytes.
+func envMB(key string, def int64) int64 {
+	if v, err := strconv.ParseInt(os.Getenv(key), 10, 64); err == nil && v > 0 {
+		return v << 20
+	}
+	return def << 20
 }
 
 // envOr returns the environment variable, or def when it is unset or empty.

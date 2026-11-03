@@ -4,6 +4,13 @@
 ; SRC must hold zainvpn.exe, zainvpn-app.exe and wintun.dll. The installer only
 ; contains the coordinator address; friends join networks with invite codes.
 ; Silent install: zainVPN-Setup.exe /S [/SERVER=host[:port]] [/NAME=nick] [/INVITE=code]
+;
+; Code signing (CI, see .github/workflows/release.yml): the uninstaller has to
+; be signed before it's packaged, so it's made separately:
+;   1. makensis -DINNER -DOUT=..\build\make-uninstaller.exe zainvpn.nsi
+;   2. run build\make-uninstaller.exe: it writes build\uninstall.exe and quits
+;   3. sign zainvpn.exe, zainvpn-app.exe and uninstall.exe
+;   4. makensis -DUNINSTALLER=..\build\uninstall.exe ... zainvpn.nsi, then sign the result
 
 Unicode true
 ManifestDPIAware true
@@ -36,6 +43,9 @@ SetCompressor /SOLID lzma
 
 Name "${APP}"
 OutFile "${OUT}"
+!ifdef UNINSTALLER
+  !pragma warning disable 6020 ; the uninstaller is prebuilt and signed, not written here
+!endif
 InstallDir "$PROGRAMFILES64\zainVPN"
 BrandingText "zainVPN ${VERSION}"
 VIProductVersion "${VERSION}.0"
@@ -70,6 +80,11 @@ Var NickField
 Var ServerField
 
 Function .onInit
+!ifdef INNER
+  WriteUninstaller "$EXEDIR\uninstall.exe"
+  SetErrorLevel 0
+  Quit
+!endif
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "zainVPN needs 64-bit Windows 10 or later."
     Abort
@@ -152,11 +167,17 @@ Section "zainVPN" SecMain
   SetOutPath "$INSTDIR"
   Call StopRunning
 
+!ifndef INNER
   File "${SRC}\zainvpn.exe"
   File "${SRC}\zainvpn-app.exe"
   File "${SRC}\wintun.dll"
   File "/oname=wintun-LICENSE.txt" "..\third_party\wintun\LICENSE.txt"
+!endif
+!ifdef UNINSTALLER
+  File "/oname=uninstall.exe" "${UNINSTALLER}"
+!else
   WriteUninstaller "$INSTDIR\uninstall.exe"
+!endif
 
   ; Leftovers from the earlier Inno Setup installer.
   Delete "$SMPROGRAMS\zainVPN.url"

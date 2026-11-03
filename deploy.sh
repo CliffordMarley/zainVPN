@@ -291,6 +291,24 @@ fail_with_logs() {
   die "$1"
 }
 
+# fetch_release_installer copies the installer at ZAINVPN_INSTALLER_URL (e.g.
+# the latest signed GitHub release) into the data volume. It's newer than the
+# unsigned one built into the image, so the dashboard serves it instead.
+fetch_release_installer() {
+  local url tmp
+  url=$(env_get ZAINVPN_INSTALLER_URL)
+  [ -n "$url" ] || return 0
+  step "Fetching the release installer"
+  tmp=$(mktemp)
+  if command -v curl >/dev/null 2>&1 && curl -fsSL -m 300 -o "$tmp" "$url" && [ "$(head -c 2 "$tmp")" = MZ ]; then
+    chmod 644 "$tmp"
+    docker_ cp "$tmp" "$CONTAINER:/data/zainVPN-Setup.exe" >/dev/null && info "Serving the installer from $url"
+  else
+    warn "Couldn't download $url; serving the installer built into the image."
+  fi
+  rm -f "$tmp"
+}
+
 wait_healthy() {
   step "Waiting for the coordinator"
   if [ -z "$HTTP_ADDR" ] || [ "$HTTP_ADDR" = off ]; then
@@ -390,6 +408,7 @@ main() {
   build_image
   restart_container
   wait_healthy
+  fetch_release_installer
   summary
 }
 

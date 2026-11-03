@@ -1,0 +1,136 @@
+# Builds the Windows installer and publishes it as a GitHub Release when a
+# version tag (v1.2.3) is pushed. Once SignPath is set up, the exes, the
+# uninstaller and the installer are signed through SignPath Foundation;
+# until then the release is unsigned.
+#
+# Repository settings (Settings > Secrets and variables > Actions):
+#   variable ZAINVPN_SERVER            coordinator address baked into the installer
+#   variable SIGNPATH_ORGANIZATION_ID  set to turn signing on
+#   variable SIGNPATH_PROJECT_SLUG     default: zainVPN
+#   variable SIGNPATH_POLICY_SLUG      default: release-signing
+#   secret   SIGNPATH_API_TOKEN
+# SignPath artifact configurations: "binaries" (zip of the three exes) and
+# "installer" (zip of zainVPN-Setup.exe); both sign the exes inside.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      SERVER: ${{ vars.ZAINVPN_SERVER }}
+      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Version
+        id: ver
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v="0.2.$(git rev-list --count HEAD)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build exes
+        shell: bash
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p build dist
+          ld="-s -w -X main.version=${{ steps.ver.outputs.version }}"
+          go build -trimpath -ldflags "$ld" -o build/zainvpn.exe ./cmd/zainvpn
+          go build -trimpath -ldflags "$ld -H windowsgui" -o build/zainvpn-app.exe ./cmd/zainvpn-app
+          cp third_party/wintun/amd64/wintun.dll build/
+
+      - name: Set up NSIS
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
+          "${env:ProgramFiles(x86)}\NSIS" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Make the uninstaller
+        shell: pwsh
+        run: |
+          makensis /V2 /DINNER "/DVERSION=${{ steps.ver.outputs.version }}" "/DOUT=..\build\make-uninstaller.exe" installer\zainvpn.nsi
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Start-Process build\make-uninstaller.exe -ArgumentList '/S' -Wait
+          if (-not (Test-Path build\uninstall.exe)) { throw 'uninstall.exe was not written' }
+
+      - name: Upload exes for signing
+        id: unsigned-exes
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-binaries
+          path: |
+            build/zainvpn.exe
+            build/zainvpn-app.exe
+            build/uninstall.exe
+
+      - name: Sign exes
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'zainVPN' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.unsigned-exes.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: build
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          makensis /V2 "/DVERSION=${{ steps.ver.outputs.version }}" "/DSERVER=$env:SERVER" "/DUNINSTALLER=..\build\uninstall.exe" installer\zainvpn.nsi
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Upload installer for signing
+        id: unsigned-installer
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist/zainVPN-Setup.exe
+
+      - name: Sign installer
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'zainVPN' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zainVPN-Setup
+          path: dist/zainVPN-Setup.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/zainVPN-Setup.exe
+          generate_release_notes: true

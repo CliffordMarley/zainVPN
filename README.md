@@ -88,3 +88,14 @@ installer/            NSIS script, icon, exe resource definitions
 third_party/wintun/   signed Wintun driver (redistributable)
 Dockerfile, deploy.sh coordinator + installer build and deployment
 ```
+
+## License
+
+zainVPN is dual-licensed under either of
+
+- [MIT License](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option. Contributions are accepted under the same terms.
+
+The Wintun driver in `third_party/wintun/` is © WireGuard LLC and is redistributed unmodified under [its own license](third_party/wintun/LICENSE.txt). Go dependencies are covered by their own licenses (BSD/MIT style).

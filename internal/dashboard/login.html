@@ -50,12 +50,14 @@
 body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 14px/20px var(--font); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .topnav { height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 20px; background: var(--topbar); color: #fff; border-bottom: 1px solid var(--topbar-border); font-size: 16px; font-weight: 700; }
-main { display: flex; justify-content: center; padding: 48px 16px 32px; }
-.wrap { width: 100%; max-width: 480px; }
-.hero { margin-bottom: 20px; text-align: center; }
-.hero h1 { margin: 0; font-size: 28px; line-height: 34px; }
+main { display: flex; justify-content: center; padding: 40px 24px 24px; }
+.wrap { width: 100%; max-width: 1040px; }
+.hero { margin-bottom: 24px; }
+.hero h1 { margin: 0; font-size: 32px; line-height: 38px; }
 .hero p { margin: 6px 0 0; color: var(--text-2); font-size: 16px; line-height: 22px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
 .container { border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); padding: 24px; }
+.container.wide { grid-column: 1 / -1; }
 h2 { margin: 0; font-size: 18px; line-height: 22px; }
 .lead { margin: 4px 0 0; color: var(--text-2); }
 .alert { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0 0; padding: 10px 12px 10px 16px; border: 1px solid var(--error); border-left-width: 4px; border-radius: 8px; background: var(--alert-error-bg); }
@@ -69,22 +71,28 @@ input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: 
 .btn svg { width: 18px; height: 18px; }
 .btn-small { min-height: 32px; font-size: 14px; }
 .meta { margin: 8px 0 0; color: var(--text-2); font-size: 12px; line-height: 16px; text-align: center; }
-.steps { list-style: none; margin: 24px 0 0; padding: 20px 0 0; border-top: 1px solid var(--divider); counter-reset: step; }
+.need { margin: 20px 0 0; padding: 16px 0 0; border-top: 1px solid var(--divider); color: var(--text-2); }
+.need b { color: var(--text); }
+.steps { list-style: none; margin: 16px 0 0; padding: 0; counter-reset: step; }
 .steps li { position: relative; padding-left: 38px; counter-increment: step; }
-.steps li + li { margin-top: 14px; }
+.steps li + li { margin-top: 16px; }
 .steps li::before { content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border: 2px solid var(--link); border-radius: 50%; color: var(--link); font-size: 12px; font-weight: 700; line-height: 20px; text-align: center; }
 .steps b { display: block; }
 .steps span { color: var(--text-2); }
-.admin { margin-top: 20px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-.admin summary { display: flex; align-items: center; gap: 8px; padding: 14px 24px; color: var(--text-2); font-weight: 700; cursor: pointer; list-style: none; }
+.bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px 20px; margin-top: 20px; }
+.admin { border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.admin summary { display: flex; align-items: center; gap: 8px; padding: 10px 20px; color: var(--text-2); font-weight: 700; cursor: pointer; list-style: none; }
 .admin summary::-webkit-details-marker { display: none; }
 .admin summary svg { width: 12px; height: 12px; transition: transform .15s; }
 .admin[open] summary svg { transform: rotate(90deg); }
-.admin form { padding: 0 24px 24px; }
-.admin label { margin-top: 0; }
-.admin .alert { margin: 0 0 16px; }
-.foot { margin: 16px 0 0; color: var(--text-2); font-size: 12px; text-align: center; }
-@media (max-width: 520px) { main { padding-top: 28px; } .container { padding: 20px; } .admin summary { padding: 14px 20px; } .admin form { padding: 0 20px 20px; } }
+.admin form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 0 20px 16px; }
+.admin label { margin: 0; }
+.admin input { width: 260px; max-width: 100%; }
+.admin .btn { width: auto; margin: 0; }
+.admin .alert { flex-basis: 100%; margin: 0; }
+.foot { margin: 0; padding-top: 12px; color: var(--text-2); font-size: 12px; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } .hero h1 { font-size: 26px; line-height: 32px; } }
+@media (max-width: 520px) { main { padding: 24px 16px; } .container { padding: 20px; } }
 @media (prefers-reduced-motion: reduce) { .admin summary svg { transition: none; } }
 </style>
 </head>
@@ -100,40 +108,51 @@ input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: 
       <p>zainVPN puts your group on one private network over the internet.</p>
     </div>
 
-    <section class="container" aria-labelledby="dl-title">
+    <div class="grid">
       {{if .Installer}}
-      <h2 id="dl-title">Join the game</h2>
-      <p class="lead">For Windows 10 and 11 (64-bit).</p>
-      <form method="get" action="/download">
-        {{if .DownloadError}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.DownloadError}}</div></div>{{end}}
-        {{if .NeedCode}}
-        <label for="code">Download code</label>
-        <input id="code" name="code" type="password" autocomplete="off" required>
-        {{end}}
-        <button type="submit" class="btn"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8m-3.5-3.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Download zainVPN for Windows</button>
-        <p class="meta">zainVPN-Setup.exe · {{.Installer.SizeText}} · updated {{.Installer.DateText}}</p>
-      </form>
-      <ol class="steps">
-        <li><b>Run the installer</b><span>Approve the admin prompt. If Windows says it protected your PC, choose More info, then Run anyway.</span></li>
-        <li><b>Paste your invite code</b><span>Open zainVPN, paste the code a friend sent you and click Join network.</span></li>
-        <li><b>Start your game</b><span>Choose LAN or System Link. Your friends' games show up automatically.</span></li>
-      </ol>
+      <section class="container" aria-labelledby="dl-title">
+        <h2 id="dl-title">Join the game</h2>
+        <p class="lead">For Windows 10 and 11 (64-bit).</p>
+        <form method="get" action="/download">
+          {{if .DownloadError}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.DownloadError}}</div></div>{{end}}
+          {{if .NeedCode}}
+          <label for="code">Download code</label>
+          <input id="code" name="code" type="password" autocomplete="off" required>
+          {{end}}
+          <button type="submit" class="btn"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8m-3.5-3.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Download zainVPN for Windows</button>
+          <p class="meta">zainVPN-Setup.exe · {{.Installer.SizeText}} · updated {{.Installer.DateText}}</p>
+        </form>
+        <p class="need"><b>You'll also need an invite code.</b> Ask the friend who set up your group's network to send you theirs.</p>
+      </section>
+      <section class="container" aria-labelledby="steps-title">
+        <h2 id="steps-title">How to join</h2>
+        <p class="lead">Takes about a minute.</p>
+        <ol class="steps">
+          <li><b>Run the installer</b><span>Approve the admin prompt. If Windows says it protected your PC, choose More info, then Run anyway.</span></li>
+          <li><b>Paste your invite code</b><span>Open zainVPN from the Start menu, paste the code a friend sent you and click Join network.</span></li>
+          <li><b>Start your game</b><span>Choose LAN or System Link. Your friends' games show up automatically.</span></li>
+        </ol>
+      </section>
       {{else}}
-      <h2 id="dl-title">Download not available yet</h2>
-      <p class="lead">The zainVPN installer hasn't been published on this server yet. Ask the person who runs it.</p>
+      <section class="container wide" aria-labelledby="dl-title">
+        <h2 id="dl-title">Download not available yet</h2>
+        <p class="lead">The zainVPN installer hasn't been published on this server yet. Ask the person who runs it.</p>
+      </section>
       {{end}}
-    </section>
+    </div>
 
-    <details class="admin"{{if .Error}} open{{end}}>
-      <summary><svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Admin sign in</summary>
-      <form method="post" action="/login">
-        {{if .Error}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.Error}}</div></div>{{end}}
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required{{if .Error}} autofocus{{end}}>
-        <button type="submit" class="btn btn-small">Sign in</button>
-      </form>
-    </details>
-    <p class="foot">zainVPN {{.Version}}</p>
+    <div class="bottom">
+      <details class="admin"{{if .Error}} open{{end}}>
+        <summary><svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Admin sign in</summary>
+        <form method="post" action="/login">
+          {{if .Error}}<div class="alert" role="alert"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path class="cut" d="m5.6 5.6 4.8 4.8m0-4.8-4.8 4.8"/></svg><div>{{.Error}}</div></div>{{end}}
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required{{if .Error}} autofocus{{end}}>
+          <button type="submit" class="btn btn-small">Sign in</button>
+        </form>
+      </details>
+      <p class="foot">zainVPN {{.Version}}</p>
+    </div>
   </div>
 </main>
 </body>

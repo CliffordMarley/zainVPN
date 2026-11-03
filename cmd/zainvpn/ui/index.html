@@ -148,6 +148,9 @@ footer { text-align: center; color: var(--text-2); font-size: 12px; line-height:
 .grid-2 > .container { margin-bottom: 0; }
 .grid-even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .invite-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.invite-tip { margin-top: auto; padding-top: 16px; overflow-wrap: anywhere; }
+#net-row .kv-col { padding: 0 14px; }
+#net-row .kv-col:first-child { padding-left: 0; }
 .invite-code { font-family: var(--mono); font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: .5px; padding: 4px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--code-bg); overflow-wrap: anywhere; user-select: all; }
 .grid-2 > .container { display: flex; flex-direction: column; }
 .grid-2 > .container > .container-body { flex: 1; display: flex; flex-direction: column; }
@@ -382,7 +385,8 @@ dialog.modal::backdrop { background: var(--overlay); }
     </section>
   </div>
 
-  <section class="container" id="net-box" aria-labelledby="net-title" hidden>
+  <div class="grid-2" id="net-row" hidden>
+  <section class="container" id="net-box" aria-labelledby="net-title">
     <div class="container-header">
       <div><h2 id="net-title">Invite friends</h2><span class="desc">Send friends this code so they can join. Anyone with it can join, so share it only with your group.</span></div>
     </div>
@@ -391,6 +395,7 @@ dialog.modal::backdrop { background: var(--overlay); }
         <code class="invite-code" id="v-invite">—</code>
         <span class="copy-wrap"><button type="button" class="btn btn-primary" id="copy-invite">Copy invite code</button></span>
       </div>
+      <p class="secondary small invite-tip">Friends who don't have zainVPN yet can download it from your coordinator's page: <span id="v-download">—</span></p>
     </div>
   </section>
 
@@ -419,6 +424,7 @@ dialog.modal::backdrop { background: var(--overlay); }
       </div>
     </div>
   </section>
+  </div>
 
   <section class="container" id="players-box" aria-labelledby="players-title">
     <div class="container-header">
@@ -929,7 +935,9 @@ dialog.modal::backdrop { background: var(--overlay); }
     setText($('footer'), 'zainVPN ' + d.version);
     const inNet = st.state !== 'setup';
     $('setup').hidden = inNet;
-    $('net-box').hidden = $('pc-box').hidden = $('players-box').hidden = $('leave-btn').hidden = !inNet;
+    $('net-row').hidden = $('players-box').hidden = $('leave-btn').hidden = !inNet;
+    const host = (st.server || '').replace(/:\d+$/, '');
+    setText($('v-download'), host ? `http://${host}:21958/` : '—');
     const peers = st.peers || [];
     const online = peers.filter((p) => p.online).length;
     setText($('page-title'), inNet ? (st.network || 'Network') : 'Get started');

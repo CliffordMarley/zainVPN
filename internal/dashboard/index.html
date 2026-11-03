@@ -141,6 +141,9 @@ svg { flex: none; }
 
 /* Containers */
 .container { margin-bottom: 20px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; margin-bottom: 20px; }
+.grid-2 > .container { margin-bottom: 0; }
+@media (max-width: 1100px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
 .container-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; padding: 16px 20px; }
 .container-header > div:first-child { min-width: 0; }
 .container-header h2 { margin: 0; font-size: 18px; line-height: 22px; font-weight: 700; }
@@ -182,6 +185,7 @@ svg { flex: none; }
 .kv-wrap { container-type: inline-size; }
 .kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
 .kv.kv-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kv.kv-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @container (max-width: 860px) {
   .kv.kv-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
   .kv.kv-4 .kv-col:nth-child(3) { padding-left: 0; border-left: 0; }
@@ -191,8 +195,12 @@ svg { flex: none; }
 .kv-col:last-child { padding-right: 0; }
 .kv dt { margin-bottom: 2px; color: var(--text-2); font-weight: 700; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
-@container (max-width: 600px) {
-  .kv, .kv.kv-4 { grid-template-columns: 1fr; row-gap: 16px; }
+@container (max-width: 440px) {
+  .kv:not(.kv-2), .kv.kv-4 { grid-template-columns: 1fr; row-gap: 16px; }
+  .kv:not(.kv-2) .kv-col { padding: 0; border-left: 0; }
+}
+@container (max-width: 300px) {
+  .kv.kv-2 { grid-template-columns: 1fr; row-gap: 16px; }
   .kv-col { padding: 0; border-left: 0; }
 }
 
@@ -409,7 +417,7 @@ function pageHeader({ crumbs, title, desc, actions }) {
 function container({ title, counter, desc, actions, body }) {
   return `<section class="container"><div class="container-header"><div><h2>${esc(title)}${counter != null ? ` <span class="counter">(${num(counter)})</span>` : ''}</h2>${desc ? `<p>${desc}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div><div class="container-body">${body}</div></section>`;
 }
-const kv = cols => `<div class="kv-wrap"><div class="kv${cols.length === 4 ? ' kv-4' : ''}">${cols.map(col => `<dl class="kv-col">${col.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`).join('')}</div></div>`;
+const kv = cols => `<div class="kv-wrap"><div class="kv${cols.length === 4 ? ' kv-4' : cols.length === 2 ? ' kv-2' : ''}">${cols.map(col => `<dl class="kv-col">${col.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`).join('')}</div></div>`;
 function alertBox(type, title, html, dismissId) {
   const close = dismissId != null ? `<button type="button" class="icon-btn" data-action="dismiss" data-id="${dismissId}" aria-label="Dismiss">${ICON.close}</button>` : '';
   return `<div class="alert alert-${type}"${dismissId != null ? ` data-key="flash-${dismissId}"` : ''}>${ICON[type]}<div class="alert-body">${title ? `<span class="alert-title">${esc(title)}</span>` : ''}${html}</div>${close}</div>`;
@@ -462,13 +470,15 @@ ${local ? alertBox('warning', 'You opened this page through localhost', `<p>Frie
   <li><b>Friends install zainVPN and paste the code</b>
     <p>Under <b>Join network</b>. zainVPN then runs in the background and starts with Windows. Their PC appears under <a href="#/networks">Networks</a>.</p></li>
 </ol>
-${alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> and <b>TCP ${esc(dashPort)}</b> (this page, for downloads) from anywhere. Admin pages still need the password.</p>`)}
 `;
+  const firewall = alertBox('info', 'AWS security group', `<p>Allow inbound <b>TCP and UDP ${esc(port)}</b> and <b>TCP ${esc(dashPort)}</b> (this page, for downloads) from anywhere. Admin pages still need the password.</p>`);
 
   return pageHeader({ crumbs: [{ text: 'zainVPN', href: '#/' }, { text: 'Dashboard' }], title: 'Dashboard', desc: 'Health of this coordinator and how to connect devices to it.' })
     + container({ title: 'Service overview', body: kv(cols) })
-    + viewInstaller(s)
-    + container({ title: 'Connect a device', desc: 'Everything your friends need to join a virtual LAN.', body: connect });
+    + '<div class="grid-2">'
+    + container({ title: 'Connect a device', desc: 'Everything your friends need to join a virtual LAN.', body: connect })
+    + `<div>${viewInstaller(s)}${firewall}</div>`
+    + '</div>';
 }
 
 function viewInstaller(s) {
@@ -478,10 +488,8 @@ function viewInstaller(s) {
   else if (!s.downloads) body = '<p>Installer downloads are disabled on this coordinator.</p>';
   else if (!inst) body = `<div class="empty"><b>No installer yet</b>One is built automatically when you deploy the server, or you can upload one here.</div>`;
   else body = kv([
-    [['File', 'zainVPN-Setup.exe']],
-    [['Size', esc(bytes(inst.size))]],
-    [['Updated', timeEl(inst.uploaded)]],
-    [['Download code', s.downloadCode ? si('success', 'Required') : si('stopped', 'Not required')]],
+    [['File', 'zainVPN-Setup.exe'], ['Updated', timeEl(inst.uploaded)]],
+    [['Size', esc(bytes(inst.size))], ['Download code', s.downloadCode ? si('success', 'Required') : si('stopped', 'Not required')]],
   ]) + `<p class="field-desc installer-note">A fresh installer with this server's address is built every time you deploy. Use Replace to serve a different build instead.</p>`;
   let actions = '';
   if (s && s.downloads) {

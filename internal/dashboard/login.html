@@ -91,6 +91,7 @@ input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: 
 .admin .btn { width: auto; margin: 0; }
 .admin .alert { flex-basis: 100%; margin: 0; }
 .foot { margin: 0; padding-top: 12px; color: var(--text-2); font-size: 12px; }
+.foot a { color: var(--link); }
 @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } .hero h1 { font-size: 26px; line-height: 32px; } }
 @media (max-width: 520px) { main { padding: 24px 16px; } .container { padding: 20px; } }
 @media (prefers-reduced-motion: reduce) { .admin summary svg { transition: none; } }
@@ -151,7 +152,7 @@ input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: 
           <button type="submit" class="btn btn-small">Sign in</button>
         </form>
       </details>
-      <p class="foot">zainVPN {{.Version}}</p>
+      <p class="foot">zainVPN {{.Version}} · <a href="https://github.com/CliffordMarley/zainVPN#code-signing-policy">Code signing policy</a> · <a href="https://github.com/CliffordMarley/zainVPN#privacy-policy">Privacy</a></p>
     </div>
   </div>
 </main>

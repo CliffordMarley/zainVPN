@@ -45,6 +45,15 @@ jobs:
           [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v="0.2.$(git rev-list --count HEAD)"
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
+      - name: Stamp the version into the exe resources
+        shell: bash
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          for exe in zainvpn zainvpn-app; do
+            go run github.com/tc-hib/go-winres@v0.3.3 make --in "installer/winres/$exe.json" \
+              --out "cmd/$exe/rsrc" --arch amd64 --product-version "$v" --file-version "$v"
+          done
+
       - name: Build exes
         shell: bash
         env:
@@ -134,3 +143,7 @@ jobs:
         with:
           files: dist/zainVPN-Setup.exe
           generate_release_notes: true
+          body: |
+            Download `zainVPN-Setup.exe`, run it, then open zainVPN and paste an invite code from a friend (or create a network).
+
+            [Code signing policy](https://github.com/CliffordMarley/zainVPN#code-signing-policy) · [Privacy policy](https://github.com/CliffordMarley/zainVPN#privacy-policy)

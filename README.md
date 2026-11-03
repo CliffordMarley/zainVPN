@@ -93,14 +93,23 @@ Dockerfile, deploy.sh coordinator + installer build and deployment
 
 Pushing a version tag (`git tag v0.3.0 && git push --tags`) runs [the release workflow](.github/workflows/release.yml) on GitHub Actions. It builds `zainvpn.exe`, `zainvpn-app.exe` and `zainVPN-Setup.exe` from this repository and publishes them as a [GitHub Release](https://github.com/CliffordMarley/zainVPN/releases). To serve that build from the dashboard, set `ZAINVPN_INSTALLER_URL` in `.env` on the server (see `.env.example`).
 
+### Code signing policy
+
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-- Committers and reviewers: [Clifford Mwale](https://github.com/CliffordMarley)
+Team roles:
+
+- Authors: [Clifford Mwale](https://github.com/CliffordMarley) ([repository collaborators](https://github.com/CliffordMarley/zainVPN/graphs/contributors))
+- Reviewers: [Clifford Mwale](https://github.com/CliffordMarley)
 - Approvers: [Clifford Mwale](https://github.com/CliffordMarley)
 
-Only binaries built by this repository's GitHub Actions workflow from its public source are signed, and every signing request is approved manually by an approver.
+Only binaries built by this repository's GitHub Actions workflow from its public source are signed, and every signing request is approved manually by an approver. The Wintun driver (`wintun.dll`) is included as published and signed by its maintainers, WireGuard LLC.
 
-**Privacy policy.** zainVPN connects only to the coordinator server that the person installing or operating it chooses, and to the peers in the networks that person creates or joins. It sends the device's nickname, a random device ID and its network addresses to that coordinator so peers can find each other; traffic between peers is end-to-end encrypted. The program sends no other information to any other networked system.
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+To work, zainVPN connects only to the coordinator server that the person installing it enters during setup, and to the peers in the networks the user creates or joins. It sends that coordinator the device's nickname, a random device ID and its network addresses so peers can find each other; traffic between peers is end-to-end encrypted. Nothing else is sent anywhere.
 
 ## License
 

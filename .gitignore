@@ -1,0 +1,10 @@
+# build outputs
+/build/
+/dist/
+*.exe
+!third_party/**/*.exe
+
+# local secrets / settings
+.env
+build.config.json
+zainvpn-state.json

@@ -456,7 +456,7 @@ ${local ? alertBox('warning', 'You opened this page through localhost', `<p>Frie
 <ol class="steps">
   <li><b>Send your friends the download link</b>
     <div class="copy-row"><code class="addr">${esc(link)}</code>${copyButton('link', link, 'Copy download link')}</div>
-    <p>They download zainVPN from the sign-in page${s && s.downloadCode ? ' with the download code (<code>ZAINVPN_DOWNLOAD_CODE</code> in <code>.env</code>)' : ''}. The installer only contains this server's address, so it's safe to share.</p></li>
+    <p>They download zainVPN from that page${s && s.downloadCode ? ' with your download code' : ''}. The installer only contains this server's address, so it's safe to share.</p></li>
   <li><b>Create a network in your zainVPN app</b>
     <p>Open zainVPN, click <b>Create network</b>, and send friends the invite code it shows (like <code>blur-7K3M-9X2Q-8W4T</code>). The code is what keeps a network private.</p></li>
   <li><b>Friends install zainVPN and paste the code</b>
@@ -476,13 +476,13 @@ function viewInstaller(s) {
   let body;
   if (!s) body = loading();
   else if (!s.downloads) body = '<p>Installer downloads are disabled on this coordinator.</p>';
-  else if (!inst) body = `<div class="empty"><b>No installer yet</b>Run <code>bash deploy.sh</code> on the server to build one, or upload <code>zainVPN-Setup.exe</code> here.</div>`;
+  else if (!inst) body = `<div class="empty"><b>No installer yet</b>One is built automatically when you deploy the server, or you can upload one here.</div>`;
   else body = kv([
     [['File', 'zainVPN-Setup.exe']],
     [['Size', esc(bytes(inst.size))]],
     [['Updated', timeEl(inst.uploaded)]],
     [['Download code', s.downloadCode ? si('success', 'Required') : si('stopped', 'Not required')]],
-  ]) + `<p class="field-desc installer-note">Every <code>bash deploy.sh</code> builds a fresh installer with this server's address. To test a local build instead, run <code>.\\build.ps1 -Server ${esc(location.hostname)} -Publish</code> on your PC or upload it with Replace.</p>`;
+  ]) + `<p class="field-desc installer-note">A fresh installer with this server's address is built every time you deploy. Use Replace to serve a different build instead.</p>`;
   let actions = '';
   if (s && s.downloads) {
     const busy = state.uploading;
